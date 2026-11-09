@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.kotlin.jvm)
     application
+    alias(libs.plugins.jmh)
 }
 
 kotlin {
@@ -26,4 +27,13 @@ tasks.named<JavaExec>("run") {
 
 tasks.test {
     useJUnitPlatform()
+}
+
+jmh {
+    jmhVersion = libs.versions.jmh.core.get()
+}
+
+// CI never runs the benchmarks, but it should still catch them failing to compile.
+tasks.check {
+    dependsOn("jmhClasses")
 }

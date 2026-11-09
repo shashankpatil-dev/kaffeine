@@ -1,9 +1,12 @@
 [versions]
 kotlin = "2.4.21"
 caffeine = "3.3.1"
+jmh-core = "1.37"
+jmh-plugin = "0.7.4"
 
 [libraries]
 caffeine = { module = "com.github.ben-manes.caffeine:caffeine", version.ref = "caffeine" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+jmh = { id = "me.champeau.jmh", version.ref = "jmh-plugin" }
