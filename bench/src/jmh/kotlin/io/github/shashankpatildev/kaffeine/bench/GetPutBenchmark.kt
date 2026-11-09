@@ -6,6 +6,7 @@ import org.openjdk.jmh.annotations.Scope
 import org.openjdk.jmh.annotations.Setup
 import org.openjdk.jmh.annotations.State
 import java.util.concurrent.ThreadLocalRandom
+import kotlin.time.Duration.Companion.hours
 
 /**
  * How many reads and writes per second each cache can do, at different thread counts.
@@ -25,12 +26,24 @@ open class GetPutBenchmark {
     @Param("read_100", "read_75", "write_100")
     lateinit var workload: String
 
+    /**
+     * Run with `-p expiry=off,on` to see what expiry costs. "on" sets expireAfterWrite to one
+     * hour, so the cache does all the expiry bookkeeping but nothing actually expires.
+     */
+    @Param("off")
+    lateinit var expiry: String
+
     private lateinit var target: BenchCache<Int, Int>
     private var readsOutOfFour = 4
 
     @Setup
     fun setup() {
-        target = BenchCache.create(cache, maximumSize = 2 * DISTINCT_KEYS)
+        val expireAfterWrite = when (expiry) {
+            "off" -> null
+            "on" -> 1.hours
+            else -> error("Unknown expiry setting: $expiry")
+        }
+        target = BenchCache.create(cache, maximumSize = 2 * DISTINCT_KEYS, expireAfterWrite)
         for (key in KEYS) target.put(key, key)
         readsOutOfFour = when (workload) {
             "read_100" -> 4
