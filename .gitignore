@@ -1,0 +1,20 @@
+# Learning notes (local only)
+docs/learn/
+
+# Gradle / Kotlin
+.gradle/
+build/
+.kotlin/
+local.properties
+
+# IDE
+.idea/
+*.iml
+.vscode/
+out/
+
+# Downloaded cache traces (large; fetched by scripts/download-traces.sh)
+traces/
+
+# OS
+.DS_Store
