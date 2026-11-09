@@ -1,6 +1,10 @@
 package io.github.shashankpatildev.kaffeine
 
-/** Counters for a cache. See [Cache.stats]. */
+/**
+ * Counters for a cache. See [Cache.stats].
+ *
+ * @property evictionCount entries the cache removed by itself, because it was full or because they expired
+ */
 public data class CacheStats(
     public val hitCount: Long,
     public val missCount: Long,

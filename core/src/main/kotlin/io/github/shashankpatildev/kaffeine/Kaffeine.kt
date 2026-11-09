@@ -1,6 +1,7 @@
 package io.github.shashankpatildev.kaffeine
 
 import io.github.shashankpatildev.kaffeine.internal.BoundedCache
+import kotlin.time.Duration
 
 /**
  * Creates a new cache.
@@ -8,23 +9,36 @@ import io.github.shashankpatildev.kaffeine.internal.BoundedCache
  * ```
  * val users = kaffeine<Long, User> {
  *     maximumSize = 10_000
+ *     expireAfterWrite = 10.minutes
  *     recordStats = true
  * }
  * ```
  *
  * @throws IllegalArgumentException if the settings are not valid
  */
-public fun <K : Any, V : Any> kaffeine(configure: KaffeineConfig.() -> Unit): Cache<K, V> {
-    val config = KaffeineConfig().apply(configure)
+public fun <K : Any, V : Any> kaffeine(configure: KaffeineConfig<K, V>.() -> Unit): Cache<K, V> {
+    val config = KaffeineConfig<K, V>().apply(configure)
     config.validate()
     return BoundedCache(config)
 }
 
 /** Settings for [kaffeine]. */
-public class KaffeineConfig internal constructor() {
+public class KaffeineConfig<K : Any, V : Any> internal constructor() {
 
     /** The most entries the cache may hold. Required, and must be above zero. */
     public var maximumSize: Long = -1
+
+    /** Remove an entry this long after it was added, or after its value was last replaced. */
+    public var expireAfterWrite: Duration? = null
+
+    /** Remove an entry this long after it was last read or written. */
+    public var expireAfterAccess: Duration? = null
+
+    /**
+     * Give each entry its own lifetime, worked out from its key and value every time it is added
+     * or replaced. For example the max-age of an HTTP response. Zero or less expires it right away.
+     */
+    public var expireAfter: ((key: K, value: V) -> Duration)? = null
 
     /** Count hits, misses and evictions. Off by default, because counting costs a little time. */
     public var recordStats: Boolean = false
@@ -39,7 +53,14 @@ public class KaffeineConfig internal constructor() {
      */
     public var doorkeeper: Boolean = false
 
+    /** Where the cache gets the time from. Tests can pass a fake one to control expiry. */
+    public var ticker: Ticker = Ticker.SYSTEM
+
     internal fun validate() {
         require(maximumSize > 0) { "maximumSize must be above zero, but was $maximumSize" }
+        val expiryModes = listOfNotNull(expireAfterWrite, expireAfterAccess, expireAfter)
+        require(expiryModes.size <= 1) { "Pick at most one of expireAfterWrite, expireAfterAccess and expireAfter" }
+        expireAfterWrite?.let { require(it.isPositive()) { "expireAfterWrite must be above zero, but was $it" } }
+        expireAfterAccess?.let { require(it.isPositive()) { "expireAfterAccess must be above zero, but was $it" } }
     }
 }
