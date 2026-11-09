@@ -6,6 +6,7 @@ import io.github.shashankpatildev.kaffeine.KaffeineConfig
 import io.github.shashankpatildev.kaffeine.internal.Node.State
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.LongAdder
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
@@ -18,7 +19,9 @@ import kotlin.concurrent.withLock
  * directly. Instead:
  *
  * - A read drops a note into [readBuffer]. This never blocks, and the note may get lost.
- * - A write queues a task in [writeBuffer]. Tasks are never lost.
+ *   Replacing the value of an existing key does the same, because to the policy it is just
+ *   another use of the key.
+ * - Adding or removing a key queues a task in [writeBuffer]. Tasks are never lost.
  * - Then one thread at a time takes [maintenanceLock] and applies all notes and tasks to the
  *   policy. If another thread already holds the lock, we just move on, because that thread
  *   will run our task too.
@@ -31,6 +34,7 @@ internal class BoundedCache<K : Any, V : Any>(config: KaffeineConfig) : Cache<K,
     private val data = ConcurrentHashMap<K, Node<K, V>>()
     private val readBuffer = ReadBuffer<Node<K, V>>()
     private val writeBuffer = ConcurrentLinkedQueue<() -> Unit>()
+    private val pendingWrites = AtomicInteger()
     private val maintenanceLock = ReentrantLock()
     private val policy = WTinyLfuPolicy(
         maximumSize = config.maximumSize,
@@ -48,7 +52,7 @@ internal class BoundedCache<K : Any, V : Any>(config: KaffeineConfig) : Cache<K,
             stats?.misses?.increment()
             return null
         }
-        if (readBuffer.offer(node) == ReadBuffer.Result.FULL) tryMaintenance()
+        afterRead(node)
         stats?.hits?.increment()
         return node.value
     }
@@ -59,11 +63,11 @@ internal class BoundedCache<K : Any, V : Any>(config: KaffeineConfig) : Cache<K,
             existing?.also { it.value = value } ?: Node(key, value).also { added = it }
         }!!
 
-        // If the node was removed again before its task runs, the policy never needs to see it.
         if (node === added) {
+            // If the node was removed again before this task runs, the policy never needs to see it.
             afterWrite { if (node.state == State.ALIVE) policy.onAdd(node) }
         } else {
-            afterWrite { if (node.state == State.ALIVE) policy.onAccess(node) }
+            afterRead(node)
         }
     }
 
@@ -88,9 +92,20 @@ internal class BoundedCache<K : Any, V : Any>(config: KaffeineConfig) : Cache<K,
 
     override fun stats(): CacheStats = stats?.snapshot() ?: CacheStats(0, 0, 0)
 
+    private fun afterRead(node: Node<K, V>) {
+        if (readBuffer.offer(node) == ReadBuffer.Result.FULL) tryMaintenance()
+    }
+
     private fun afterWrite(task: () -> Unit) {
         writeBuffer.add(task)
-        tryMaintenance()
+        if (pendingWrites.incrementAndGet() > MAX_PENDING_WRITES) {
+            // The thread doing maintenance is falling behind. Instead of letting the queue grow
+            // without limit, wait for the lock and help. This slows writers down to the pace
+            // the policy can keep up with.
+            cleanUp()
+        } else {
+            tryMaintenance()
+        }
     }
 
     /**
@@ -117,6 +132,7 @@ internal class BoundedCache<K : Any, V : Any>(config: KaffeineConfig) : Cache<K,
         readBuffer.drainTo { node -> if (node.state == State.ALIVE) policy.onAccess(node) }
         while (true) {
             val task = writeBuffer.poll() ?: break
+            pendingWrites.decrementAndGet()
             task()
         }
     }
@@ -135,5 +151,9 @@ internal class BoundedCache<K : Any, V : Any>(config: KaffeineConfig) : Cache<K,
         val evictions = LongAdder()
 
         fun snapshot() = CacheStats(hits.sum(), misses.sum(), evictions.sum())
+    }
+
+    private companion object {
+        const val MAX_PENDING_WRITES = 1024
     }
 }
