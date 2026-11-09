@@ -188,7 +188,8 @@ Caffeine reaches 207 million. Every reader is waiting in line for the same lock.
 ### v2: buffered policy updates
 
 Only Kaffeine changed, so only Kaffeine was measured again, with the same settings. Compare
-with the other caches in the v1 table above.
+with the other caches in the v1 table above, but see the note on noise further down: the
+"vs Caffeine" column compares runs from two sessions and is too pessimistic.
 
 | Workload | 1 thread | 4 threads | 8 threads | vs v1 at 8 threads | vs Caffeine at 8 threads |
 |---|---:|---:|---:|---:|---:|
@@ -209,3 +210,29 @@ gap is the cost of each operation, not how it scales. Two likely reasons: Caffei
 policy updates on a background thread pool, while Kaffeine does it on the calling thread,
 and Caffeine's read path is more tuned (padding against false sharing, cheaper per-thread
 stripe choice). Profiling this is on the list for step 4.
+
+### Cost of expiry
+
+8 threads, Kaffeine and Caffeine measured in the same session. Expiry "on" means
+`expireAfterWrite = 1 hour`, so both caches do all the expiry bookkeeping but nothing
+actually expires.
+
+```bash
+THREADS=8 scripts/benchmark.sh -p cache=kaffeine,caffeine -p expiry=off,on
+```
+
+| Workload | Kaffeine off | Kaffeine on | Cost | Caffeine off | Caffeine on | Cost |
+|---|---:|---:|---:|---:|---:|---:|
+| read_100 | 117.1 | 68.7 | -41% | 190.7 | 94.0 | -51% |
+| read_75 | 57.1 | 43.4 | -24% | 105.3 | 66.8 | -37% |
+| write_100 | 38.3 | 29.9 | -22% | 56.3 | 40.7 | -28% |
+
+Expiry costs both caches a similar share. Every read now reads the clock and checks the
+entry's time, and a write that moves the expiry time by more than a second has to move the
+entry in the timer wheel. With expiry on, Kaffeine reaches 65% to 73% of Caffeine.
+
+**A note on noise.** Without expiry, Kaffeine did 117 million reads per second here, against
+77 million in the v2 run above. Nothing in the read path changed between the two runs, so
+that gap is just how much a laptop moves between sessions (heat, turbo, background work).
+Only compare numbers from the same run. In this run, Kaffeine reaches 61% of Caffeine on
+pure reads; the 37% in the v2 table compared against Caffeine numbers from an earlier session.
