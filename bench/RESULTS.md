@@ -29,13 +29,13 @@ Average difference in hit ratio points over the cache sizes of each trace.
 
 | Trace | Kind | Kaffeine vs LRU | Kaffeine vs Caffeine | Doorkeeper effect | Gap to optimal |
 |-------|------|---:|---:|---:|---:|
-| DS1 | database (ARC) | +20.2 | +0.59 | +0.41 | 4.2 |
-| S3 | web search (ARC) | +18.1 | +1.39 | -0.43 | 14.6 |
-| OLTP | database (ARC) | -0.3 | -3.22 | -0.08 | 15.5 |
-| loop | loop (LIRS) | +58.5 | -0.31 | -1.38 | 3.2 |
-| gli | mixed (LIRS) | +21.6 | +3.59 | +0.05 | 1.5 |
-| multi2 | mixed (LIRS) | +11.9 | -0.29 | -0.34 | 4.3 |
-| sprite | file system (LIRS) | +1.8 | -0.75 | -0.27 | 14.9 |
+| DS1 | database (ARC) | +20.2 | +0.61 | +0.33 | 4.2 |
+| S3 | web search (ARC) | +18.1 | +1.41 | -0.44 | 14.6 |
+| OLTP | database (ARC) | -0.3 | -3.20 | -0.07 | 15.5 |
+| loop | loop (LIRS) | +58.5 | -0.37 | -1.32 | 3.2 |
+| gli | mixed (LIRS) | +21.6 | +3.60 | +0.04 | 1.5 |
+| multi2 | mixed (LIRS) | +12.0 | -0.18 | -0.21 | 4.2 |
+| sprite | file system (LIRS) | +1.7 | -0.87 | -0.12 | 15.1 |
 
 Over all 29 data points, Kaffeine and Caffeine are **level on average** (+0.03 points).
 
@@ -52,14 +52,14 @@ Kaffeine is 3.2 points behind Caffeine. Our window is fixed at 1% of the cache. 
 grows or shrinks its window while running (hill climbing), which lets it act more like LRU
 on traces like this one. Adding that is a stretch goal in [the plan](../docs/PLAN.md).
 
-**The doorkeeper did not earn its keep.** It helped at only 12 of the 29 points and lowered
-the hit ratio by about 0.3 points on average, while costing about 10 extra bytes per entry. The
+**The doorkeeper did not earn its keep.** It helped at only 14 of the 29 points and lowered
+the hit ratio by about 0.25 points on average, while costing about 10 extra bytes per entry. The
 TinyLFU paper uses it so the sketch can be made smaller for the same accuracy. We keep the
 sketch at full size, so the doorkeeper only adds noise from its false positives and from
 being cleared at every reset. It is off by default and stays available as an option.
 
-**The read buffer barely changes the hit ratio.** These numbers come from the buffered v2
-cache, where reads only leave a note that may be dropped. Compared with the v1 cache, which
+**The read buffer barely changes the hit ratio.** These numbers come from the final cache,
+where reads only leave a note that may be dropped. Compared with the v1 cache, which
 updated the policy on every read, the hit ratio moved by +0.1 points on average, and 25 of
 the 29 points moved by less than half a point. The exception is loop, which swung from -1.7
 to +3.9 points: it is a strict cycle, so the exact order in which the policy sees accesses
@@ -73,45 +73,45 @@ Hit ratio in %, higher is better.
 
 | Cache size | lru | kaffeine | kaffeine-doorkeeper | caffeine | belady |
 |---:|---:|---:|---:|---:|---:|
-| 1,000,000 | 3.09 | 14.33 | 15.01 | 12.45 | 20.19 |
-| 2,000,000 | 10.74 | 28.45 | 29.13 | 28.20 | 31.79 |
-| 4,000,000 | 20.24 | 44.96 | 45.21 | 45.35 | 48.09 |
-| 8,000,000 | 43.03 | 70.34 | 70.38 | 69.72 | 74.93 |
+| 1,000,000 | 3.09 | 14.25 | 15.02 | 12.49 | 20.19 |
+| 2,000,000 | 10.74 | 28.44 | 28.75 | 28.15 | 31.79 |
+| 4,000,000 | 20.24 | 45.00 | 45.22 | 45.23 | 48.09 |
+| 8,000,000 | 43.03 | 70.33 | 70.36 | 69.72 | 74.93 |
 
 #### S3 (16,407,702 requests)
 
 | Cache size | lru | kaffeine | kaffeine-doorkeeper | caffeine | belady |
 |---:|---:|---:|---:|---:|---:|
-| 100,000 | 2.33 | 11.90 | 10.84 | 10.94 | 25.42 |
-| 200,000 | 4.63 | 22.99 | 22.42 | 21.33 | 39.79 |
-| 400,000 | 12.04 | 42.65 | 42.48 | 41.03 | 59.96 |
-| 800,000 | 56.60 | 70.52 | 70.59 | 69.20 | 81.27 |
+| 100,000 | 2.33 | 11.90 | 10.84 | 10.95 | 25.42 |
+| 200,000 | 4.63 | 23.00 | 22.42 | 21.27 | 39.79 |
+| 400,000 | 12.04 | 42.65 | 42.50 | 41.07 | 59.96 |
+| 800,000 | 56.60 | 70.56 | 70.60 | 69.19 | 81.27 |
 
 #### OLTP (914,145 requests)
 
 | Cache size | lru | kaffeine | kaffeine-doorkeeper | caffeine | belady |
 |---:|---:|---:|---:|---:|---:|
-| 1,000 | 32.83 | 35.60 | 35.48 | 40.04 | 53.61 |
-| 2,000 | 42.47 | 42.18 | 42.13 | 46.34 | 60.40 |
-| 5,000 | 53.65 | 52.49 | 52.28 | 54.42 | 68.27 |
-| 10,000 | 60.70 | 59.84 | 59.73 | 62.68 | 73.02 |
-| 15,000 | 64.63 | 62.82 | 62.93 | 65.53 | 75.14 |
+| 1,000 | 32.83 | 35.61 | 35.48 | 40.01 | 53.61 |
+| 2,000 | 42.47 | 42.18 | 42.13 | 46.35 | 60.40 |
+| 5,000 | 53.65 | 52.48 | 52.33 | 54.38 | 68.27 |
+| 10,000 | 60.70 | 59.86 | 59.75 | 62.67 | 73.02 |
+| 15,000 | 64.63 | 62.80 | 62.91 | 65.51 | 75.14 |
 
 #### loop (505,500 requests)
 
 | Cache size | lru | kaffeine | kaffeine-doorkeeper | caffeine | belady |
 |---:|---:|---:|---:|---:|---:|
 | 250 | 0.00 | 24.19 | 20.66 | 22.41 | 24.63 |
-| 500 | 0.00 | 47.15 | 45.17 | 47.76 | 49.36 |
-| 750 | 0.00 | 65.40 | 65.58 | 67.96 | 74.04 |
-| 1,000 | 0.00 | 97.31 | 97.12 | 97.16 | 98.71 |
+| 500 | 0.00 | 47.15 | 45.17 | 47.62 | 49.36 |
+| 750 | 0.00 | 65.45 | 65.52 | 68.55 | 74.04 |
+| 1,000 | 0.00 | 97.22 | 97.36 | 96.92 | 98.71 |
 
 #### gli (6,015 requests)
 
 | Cache size | lru | kaffeine | kaffeine-doorkeeper | caffeine | belady |
 |---:|---:|---:|---:|---:|---:|
 | 250 | 0.91 | 16.19 | 16.31 | 14.68 | 17.64 |
-| 500 | 0.95 | 33.23 | 33.22 | 27.78 | 34.26 |
+| 500 | 0.95 | 33.27 | 33.22 | 27.78 | 34.26 |
 | 1,000 | 11.21 | 49.53 | 49.61 | 42.13 | 53.13 |
 | 2,000 | 57.41 | 57.96 | 57.96 | 57.96 | 57.96 |
 
@@ -120,18 +120,18 @@ Hit ratio in %, higher is better.
 | Cache size | lru | kaffeine | kaffeine-doorkeeper | caffeine | belady |
 |---:|---:|---:|---:|---:|---:|
 | 500 | 35.98 | 47.72 | 47.17 | 49.10 | 53.60 |
-| 1,000 | 47.80 | 56.24 | 56.35 | 57.98 | 62.16 |
-| 2,000 | 49.00 | 69.50 | 68.63 | 69.36 | 74.65 |
+| 1,000 | 47.80 | 56.33 | 56.35 | 57.98 | 62.16 |
+| 2,000 | 49.00 | 69.85 | 69.57 | 69.36 | 74.65 |
 | 3,000 | 71.18 | 77.95 | 77.92 | 76.13 | 78.40 |
 
 #### sprite (133,996 requests)
 
 | Cache size | lru | kaffeine | kaffeine-doorkeeper | caffeine | belady |
 |---:|---:|---:|---:|---:|---:|
-| 100 | 21.58 | 31.37 | 30.47 | 31.49 | 50.80 |
-| 250 | 48.84 | 55.45 | 55.49 | 55.12 | 74.48 |
-| 500 | 78.30 | 74.94 | 74.60 | 76.22 | 87.88 |
-| 1,000 | 90.64 | 84.94 | 85.05 | 86.86 | 93.24 |
+| 100 | 21.58 | 31.37 | 30.45 | 31.72 | 50.80 |
+| 250 | 48.84 | 55.49 | 55.54 | 54.79 | 74.48 |
+| 500 | 78.30 | 74.41 | 74.63 | 76.21 | 87.88 |
+| 1,000 | 90.64 | 84.86 | 85.04 | 86.90 | 93.24 |
 
 ### Traces
 
@@ -164,7 +164,46 @@ To reproduce:
 scripts/benchmark.sh
 ```
 
-### v1: one lock around the policy
+### Final results (v0.1.0)
+
+All four caches in one JMH run, on the released code, so these numbers can be compared
+with each other directly.
+
+| Workload | Cache | 1 thread | 4 threads | 8 threads |
+|---|---|---:|---:|---:|
+| read_100 | chm | 95.2 | 311.0 | 430.3 |
+| read_100 | caffeine | 49.7 | 136.1 | 244.5 |
+| read_100 | kaffeine | 14.8 | 68.3 | 128.4 |
+| read_100 | lhm-lock | 27.6 | 8.9 | 8.0 |
+| read_75 | chm | 37.5 | 99.1 | 141.8 |
+| read_75 | caffeine | 24.8 | 64.5 | 112.4 |
+| read_75 | kaffeine | 11.1 | 37.8 | 55.8 |
+| read_75 | lhm-lock | 23.1 | 9.7 | 8.6 |
+| write_100 | chm | 37.8 | 58.6 | 56.4 |
+| write_100 | caffeine | 27.3 | 51.5 | 66.5 |
+| write_100 | kaffeine | 10.7 | 25.6 | 38.9 |
+| write_100 | lhm-lock | 25.9 | 9.0 | 8.0 |
+
+Kaffeine as a share of Caffeine, from the same run:
+
+| Workload | 1 thread | 4 threads | 8 threads |
+|---|---:|---:|---:|
+| read_100 | 30% | 50% | 53% |
+| read_75 | 45% | 59% | 50% |
+| write_100 | 39% | 50% | 59% |
+
+Kaffeine scales with threads the way Caffeine does, at about half its speed once several
+threads are busy. On a single thread the gap is wider. Caffeine runs its policy upkeep on a
+background thread pool, which a one-thread benchmark gets for free, while Kaffeine does that
+work on the calling thread. The naive `LinkedHashMap` behind a lock gets slower with every
+thread added, which is the problem all of this machinery exists to solve.
+
+### How we got here
+
+The tables below are from earlier runs, kept to show what each step changed. They come from
+different sessions, so compare numbers only within one table.
+
+#### v1: one lock around the policy
 
 | Workload | Cache | 1 thread | 4 threads | 8 threads |
 |---|---|---:|---:|---:|
@@ -185,11 +224,11 @@ v1 takes the policy lock on every read and every write. So it gets slower as thr
 added: from 13.1 million reads per second on one thread down to 6.5 million on eight, while
 Caffeine reaches 207 million. Every reader is waiting in line for the same lock.
 
-### v2: buffered policy updates
+#### v2: buffered policy updates
 
-Only Kaffeine changed, so only Kaffeine was measured again, with the same settings. Compare
-with the other caches in the v1 table above, but see the note on noise further down: the
-"vs Caffeine" column compares runs from two sessions and is too pessimistic.
+Only Kaffeine changed, so only Kaffeine was measured again, with the same settings. The
+"vs" columns compare against the v1 run's numbers, from another session, so the "vs Caffeine"
+column is too pessimistic (see the note on noise below, and the final results above).
 
 | Workload | 1 thread | 4 threads | 8 threads | vs v1 at 8 threads | vs Caffeine at 8 threads |
 |---|---:|---:|---:|---:|---:|
@@ -211,7 +250,7 @@ policy updates on a background thread pool, while Kaffeine does it on the callin
 and Caffeine's read path is more tuned (padding against false sharing, cheaper per-thread
 stripe choice). Profiling this is on the list for step 4.
 
-### Cost of expiry
+#### Cost of expiry
 
 8 threads, Kaffeine and Caffeine measured in the same session. Expiry "on" means
 `expireAfterWrite = 1 hour`, so both caches do all the expiry bookkeeping but nothing
