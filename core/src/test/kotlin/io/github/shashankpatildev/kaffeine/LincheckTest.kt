@@ -1,6 +1,7 @@
 package io.github.shashankpatildev.kaffeine
 
 import io.github.shashankpatildev.kaffeine.internal.BoundedCache
+import kotlinx.coroutines.Dispatchers
 import org.jetbrains.lincheck.datastructures.IntGen
 import org.jetbrains.lincheck.datastructures.ModelCheckingOptions
 import org.jetbrains.lincheck.datastructures.Operation
@@ -21,7 +22,11 @@ import kotlin.test.Test
 @Param(name = "key", gen = IntGen::class, conf = "1:5")
 class LincheckTest {
 
-    private val cache = kaffeine<Int, Int> { maximumSize = 16 }
+    private val cache = kaffeine<Int, Int> {
+        maximumSize = 16
+        // Run loads right in the calling thread, so Lincheck controls every thread involved.
+        loadContext = Dispatchers.Unconfined
+    }
 
     @Operation
     fun put(@Param(name = "key") key: Int, value: Int) = cache.put(key, value)
@@ -31,6 +36,9 @@ class LincheckTest {
 
     @Operation
     fun invalidate(@Param(name = "key") key: Int) = cache.invalidate(key)
+
+    @Operation
+    suspend fun load(@Param(name = "key") key: Int) = cache.get(key) { it * 10 }
 
     @Validate
     fun policyMatchesMap() {
