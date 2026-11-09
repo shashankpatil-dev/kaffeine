@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="420" viewBox="0 0 800 420" role="img">
+<style>
+  svg { --surface:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e; --muted:#898781; --grid:#e1e0d9; --axis:#c3c2b7;
+        --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; }
+  @media (prefers-color-scheme: dark) {
+    svg { --surface:#1a1a19; --ink:#f0efec; --ink2:#c3c2b7; --muted:#898781; --grid:#2c2c2a; --axis:#383835;
+          --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; }
+  }
+  text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--ink2); }
+  .title { font-size: 16px; font-weight: 600; fill: var(--ink); }
+  .sub { font-size: 12px; }
+  .tick { font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+  .label { font-size: 12px; fill: var(--ink); }
+  .grid { stroke: var(--grid); stroke-width: 1; }
+  .axis { stroke: var(--axis); stroke-width: 1; }
+</style>
+<rect width="800" height="420" rx="8" fill="var(--surface)"/>
+<text class="title" x="60" y="30">Reads per second as threads are added</text>
+<text class="sub" x="60" y="50">Millions of reads per second, read-only workload, all caches in one JMH run</text>
+<rect x="60" y="65" width="10" height="10" rx="2" fill="var(--s1)"/><text class="label" x="75" y="74">Kaffeine</text>
+<rect x="149.8" y="65" width="10" height="10" rx="2" fill="var(--s2)"/><text class="label" x="164.8" y="74">Caffeine</text>
+<rect x="239.60000000000002" y="65" width="10" height="10" rx="2" fill="var(--s3)"/><text class="label" x="254.60000000000002" y="74">ConcurrentHashMap, no eviction</text>
+<rect x="474.6" y="65" width="10" height="10" rx="2" fill="var(--s4)"/><text class="label" x="489.6" y="74">LinkedHashMap + lock</text>
+<line class="grid" x1="60" x2="600" y1="370.0" y2="370.0"/>
+<text class="tick" x="52" y="374.0" text-anchor="end">0</text>
+<line class="grid" x1="60" x2="600" y1="307.3333333333333" y2="307.3333333333333"/>
+<text class="tick" x="52" y="311.3333333333333" text-anchor="end">100</text>
+<line class="grid" x1="60" x2="600" y1="244.66666666666669" y2="244.66666666666669"/>
+<text class="tick" x="52" y="248.66666666666669" text-anchor="end">200</text>
+<line class="grid" x1="60" x2="600" y1="182.0" y2="182.0"/>
+<text class="tick" x="52" y="186.0" text-anchor="end">300</text>
+<line class="grid" x1="60" x2="600" y1="119.33333333333334" y2="119.33333333333334"/>
+<text class="tick" x="52" y="123.33333333333334" text-anchor="end">400</text>
+<line class="axis" x1="60" x2="600" y1="370.0" y2="370.0"/>
+<text class="tick" x="60.0" y="388.0" text-anchor="middle">1</text>
+<text class="tick" x="291.42857142857144" y="388.0" text-anchor="middle">4</text>
+<text class="tick" x="600.0" y="388.0" text-anchor="middle">8</text>
+<text class="tick" x="330.0" y="408" text-anchor="middle">threads</text>
+<polyline points="60.0,360.7 291.4,327.2 600.0,289.5" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="60.0" cy="360.7" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="291.4" cy="327.2" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="600.0" cy="289.5" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"/>
+<text class="label" x="612.0" y="293.5">128M  Kaffeine</text>
+<polyline points="60.0,338.9 291.4,284.7 600.0,216.8" fill="none" stroke="var(--s2)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="60.0" cy="338.9" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="291.4" cy="284.7" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="600.0" cy="216.8" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"/>
+<text class="label" x="612.0" y="220.8">244M  Caffeine</text>
+<polyline points="60.0,310.3 291.4,175.1 600.0,100.3" fill="none" stroke="var(--s3)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="60.0" cy="310.3" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="291.4" cy="175.1" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="600.0" cy="100.3" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"/>
+<text class="label" x="612.0" y="104.3">430M  ConcurrentHashMap</text>
+<polyline points="60.0,352.7 291.4,364.4 600.0,365.0" fill="none" stroke="var(--s4)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="60.0" cy="352.7" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="291.4" cy="364.4" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="600.0" cy="365.0" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"/>
+<text class="label" x="612.0" y="369.0">8M  LinkedHashMap + lock</text>
+</svg>
