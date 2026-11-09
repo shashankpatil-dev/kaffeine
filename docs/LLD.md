@@ -21,7 +21,9 @@ kaffeine/
 │   └── wrapper/                      # Gradle wrapper (committed)
 ├── gradlew, gradlew.bat
 ├── scripts/
-│   └── download-traces.sh            # fetches public traces into traces/
+│   ├── download-traces.sh            # fetches public traces into traces/
+│   ├── simulate-all.sh               # hit ratio on every trace
+│   └── benchmark.sh                  # JMH throughput runs
 ├── docs/
 │   ├── PRD.md  HLD.md  LLD.md  PLAN.md
 │   └── learn/                        # local learning notes (git-ignored)
@@ -70,9 +72,7 @@ kaffeine/
 │   │   ├── GetPutBenchmark.kt
 │   │   ├── BenchCaches.kt                # adapters: Kaffeine, Caffeine, LinkedHashMap+lock, CHM
 │   │   └── Zipf.kt                       # Zipf key generator
-│   └── results/
-│       ├── hit-ratio/                    # committed CSV + Markdown
-│       └── jmh/                          # committed JSON
+│   └── RESULTS.md                        # one summary of every benchmark result
 └── traces/                           # downloaded traces (git-ignored)
 ```
 
@@ -97,7 +97,7 @@ kaffeine/
 | `./gradlew :core:test` | Library tests only |
 | `./gradlew :core:koverHtmlReport` | Coverage report |
 | `./gradlew :bench:run --args="--trace traces/DS1.lis --format arc --sizes 1000,10000"` | Hit-ratio simulation |
-| `./gradlew :bench:jmh` | Throughput benchmarks → `bench/results/jmh/` |
+| `scripts/benchmark.sh` | Throughput benchmarks (JMH) |
 
 ---
 
@@ -762,7 +762,7 @@ A trace is loaded once into a `LongArray` (the format is picked from the file na
 | `caffeine` | Same with `Caffeine.newBuilder().maximumSize(n).executor(Runnable::run)` (synchronous maintenance) |
 | `belady` | Pass 1: compute each request's next-use position (backward pass with a primitive `Long → Int` map). Pass 2: on a miss with a full cache, evict the key whose next use is furthest away (a primitive max-heap with lazy deletion). O(n log n) |
 
-Output per trace: a Markdown table (stdout + `bench/results/hit-ratio/<trace>.md`) and a CSV. Charts are made in Step 4.
+Output per trace: a Markdown table on stdout, also saved with a CSV under `bench/build/hit-ratio/` (git-ignored). The summary lives in `bench/RESULTS.md`.
 
 ---
 

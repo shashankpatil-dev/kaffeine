@@ -74,7 +74,7 @@ Kotlin backend services (Ktor, Spring WebFlux, coroutines) need an in-memory cac
 | NFR-4 | **Runtime dependencies** | Only `kotlinx-coroutines-core` |
 | NFR-5 | **Platform** | JDK 17+, Kotlin 2.x |
 | NFR-6 | **Test coverage** of `core` | ≥ **85%** lines (Kover) |
-| NFR-7 | **Reproducibility** | Every benchmark runs with one Gradle command; raw results are committed |
+| NFR-7 | **Reproducibility** | Every benchmark runs with one command; a summary of the results is committed |
 
 > NFR-2 and NFR-3 are **targets, not promises**. Whatever the real numbers are, they get reported honestly, with the reasons.
 
@@ -122,8 +122,8 @@ val http = kaffeine<String, Response> {
 ## 9. Success metrics (definition of done)
 
 - [ ] All functional requirements implemented and tested
-- [ ] Hit-ratio results for **≥ 4 public traces × ≥ 3 cache sizes** vs LRU, Caffeine and Bélády (optimal), committed in `bench/results/`
-- [ ] JMH results for **3 workloads × 1/4/8 threads** vs Caffeine, committed in `bench/results/`
+- [ ] Hit-ratio results for **≥ 4 public traces × ≥ 3 cache sizes** vs LRU, Caffeine and Bélády (optimal), summed up in `bench/RESULTS.md`
+- [ ] JMH results for **3 workloads × 1/4/8 threads** vs Caffeine, summed up in `bench/RESULTS.md`
 - [ ] Coalescing proven: 1,000 concurrent `get` calls for the same key → loader called **exactly once** (test)
 - [ ] CI green: unit, stress and Lincheck tests, coverage ≥ 85%
 - [ ] Released as `v0.1.0` on JitPack. A sample project can depend on it

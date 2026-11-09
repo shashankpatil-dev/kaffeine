@@ -40,7 +40,7 @@ flowchart TB
     Sim --> Caf["Caffeine<br/>(bench-only dependency)"]
     JMH --> Caf
     Traces[("traces/<br/>downloaded, git-ignored")] --> Sim
-    Sim --> Res["bench/results/<br/>CSV + Markdown + charts"]
+    Sim --> Res["bench/RESULTS.md<br/>one summary doc"]
     JMH --> Res
 ```
 
@@ -328,7 +328,7 @@ flowchart LR
     RD --> P3["Caffeine"]
     RD --> P4["Bélády (optimal)"]
     P1 & P2 & P3 & P4 --> REP["Report<br/>hit ratio per cache size"]
-    REP --> OUT["bench/results/hit-ratio/*.csv<br/>+ Markdown table + Mermaid chart"]
+    REP --> OUT["Markdown table on stdout<br/>summed up in bench/RESULTS.md"]
 ```
 
 Single-threaded, so the results are **deterministic**.
@@ -343,7 +343,7 @@ flowchart LR
     B --> C3["Caffeine"]
     B --> C4["ConcurrentHashMap<br/>(no eviction, ceiling)"]
     C1 & C2 & C3 & C4 --> J["JMH JSON<br/>1 / 4 / 8 threads"]
-    J --> R["bench/results/jmh/*.json<br/>+ chart in README"]
+    J --> R["summed up in bench/RESULTS.md"]
 ```
 
 ---
