@@ -133,3 +133,47 @@ Hit ratio in %, higher is better.
 - **LIRS traces** (loop, gli, multi2, sprite): S. Jiang and X. Zhang, "LIRS: An Efficient
   Low Inter-reference Recency Set Replacement Policy", SIGMETRICS 2002. Cache sizes are
   spread over each trace's number of unique keys.
+
+## Throughput
+
+Millions of operations per second, higher is better.
+
+Measured with JMH on an AMD Ryzen 5 5625U laptop (6 cores, 12 threads) with JDK 17:
+one fork, 3 warmup rounds and 5 measured rounds of 2 seconds each. Keys follow a Zipf
+distribution over 65,536 keys. Every key is in the cache, so reads always hit, and we
+measure the cache's own bookkeeping rather than misses. Laptop numbers are noisy, so treat
+differences under about 10% as noise.
+
+| Cache | What it is |
+|-------|------------|
+| `chm` | `ConcurrentHashMap` with no eviction at all. No cache can beat it, so it is the ceiling |
+| `caffeine` | Caffeine 3.3.1 |
+| `kaffeine` | This library |
+| `lhm-lock` | `LinkedHashMap` in access order behind one lock. The naive floor |
+
+To reproduce:
+
+```bash
+scripts/benchmark.sh
+```
+
+### v1: one lock around the policy
+
+| Workload | Cache | 1 thread | 4 threads | 8 threads |
+|---|---|---:|---:|---:|
+| read_100 | chm | 90.3 | 283.3 | 397.3 |
+| read_100 | caffeine | 36.5 | 169.7 | 206.7 |
+| read_100 | kaffeine | 13.1 | 8.6 | 6.5 |
+| read_100 | lhm-lock | 25.3 | 9.2 | 8.2 |
+| read_75 | chm | 37.9 | 93.1 | 129.9 |
+| read_75 | caffeine | 17.0 | 67.8 | 105.3 |
+| read_75 | kaffeine | 12.2 | 6.9 | 5.8 |
+| read_75 | lhm-lock | 18.5 | 10.2 | 7.2 |
+| write_100 | chm | 36.9 | 60.5 | 54.1 |
+| write_100 | caffeine | 25.3 | 59.3 | 59.0 |
+| write_100 | kaffeine | 12.6 | 7.0 | 6.4 |
+| write_100 | lhm-lock | 22.2 | 8.4 | 7.9 |
+
+v1 takes the policy lock on every read and every write. So it gets slower as threads are
+added: from 13.1 million reads per second on one thread down to 6.5 million on eight, while
+Caffeine reaches 207 million. Every reader is waiting in line for the same lock.
