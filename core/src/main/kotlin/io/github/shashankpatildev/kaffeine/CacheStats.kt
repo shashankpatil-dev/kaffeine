@@ -3,6 +3,8 @@ package io.github.shashankpatildev.kaffeine
 /**
  * Counters for a cache. See [Cache.stats].
  *
+ * @property hitCount lookups that found a fresh value
+ * @property missCount lookups that found nothing, or only an expired value
  * @property evictionCount entries the cache removed by itself, because it was full or because they expired
  * @property loadSuccessCount loads started by [Cache.get] that returned a value
  * @property loadFailureCount loads started by [Cache.get] that threw
