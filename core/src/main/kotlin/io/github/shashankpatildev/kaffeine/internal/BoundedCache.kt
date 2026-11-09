@@ -11,7 +11,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.LongAdder
 import java.util.concurrent.locks.ReentrantLock
@@ -29,9 +31,9 @@ import kotlin.math.abs
  *   Replacing the value of an existing key does the same, because to the policy it is just
  *   another use of the key.
  * - Adding or removing a key queues a task in [writeBuffer]. Tasks are never lost.
- * - Then one thread at a time takes [maintenanceLock] and applies all notes and tasks to the
- *   policy. If another thread already holds the lock, we just move on, because that thread
- *   will run our task too.
+ * - Then maintenance applies all notes and tasks to the policy, one thread at a time under
+ *   [maintenanceLock]. It runs on [executor] (a background thread pool by default), so the
+ *   threads calling get and put do not pay for it.
  *
  * The map is always the truth about what is cached. The policy may run a few operations
  * behind, and that is fine.
@@ -46,6 +48,9 @@ internal class BoundedCache<K : Any, V : Any>(config: KaffeineConfig<K, V>) : Ca
     private val writeBuffer = ConcurrentLinkedQueue<() -> Unit>()
     private val pendingWrites = AtomicInteger()
     private val maintenanceLock = ReentrantLock()
+    private val executor = config.executor
+    private val maintenanceScheduled = AtomicBoolean()
+    private val maintenanceTask = Runnable { runScheduledMaintenance() }
     private val policy = WTinyLfuPolicy(
         maximumSize = config.maximumSize,
         sketch = FrequencySketch(config.maximumSize, config.doorkeeper),
@@ -227,7 +232,7 @@ internal class BoundedCache<K : Any, V : Any>(config: KaffeineConfig<K, V>) : Ca
     }
 
     private fun afterRead(node: Node<K, V>) {
-        if (readBuffer.offer(node) == ReadBuffer.Result.FULL) tryMaintenance()
+        if (readBuffer.offer(node) == ReadBuffer.Result.FULL) scheduleMaintenance()
     }
 
     private fun afterWrite(task: () -> Unit) {
@@ -238,8 +243,32 @@ internal class BoundedCache<K : Any, V : Any>(config: KaffeineConfig<K, V>) : Ca
             // the policy can keep up with.
             cleanUp()
         } else {
+            scheduleMaintenance()
+        }
+    }
+
+    /**
+     * Asks [executor] to run maintenance. The flag makes sure only one job is waiting at a
+     * time, however many threads ask; reading it first keeps busy threads from all hitting
+     * the compare-and-set at once.
+     */
+    private fun scheduleMaintenance() {
+        if (maintenanceScheduled.get() || !maintenanceScheduled.compareAndSet(false, true)) return
+        try {
+            executor.execute(maintenanceTask)
+        } catch (e: RejectedExecutionException) {
+            // The executor is full or shut down. Do the work here rather than not at all.
+            maintenanceScheduled.set(false)
             tryMaintenance()
         }
+    }
+
+    private fun runScheduledMaintenance() {
+        tryMaintenance()
+        maintenanceScheduled.set(false)
+        // A write can land after tryMaintenance() checked the queue but before we cleared the
+        // flag. Its writer saw the flag still set and did not schedule a job, so we do it for them.
+        if (writeBuffer.isNotEmpty()) scheduleMaintenance()
     }
 
     /**

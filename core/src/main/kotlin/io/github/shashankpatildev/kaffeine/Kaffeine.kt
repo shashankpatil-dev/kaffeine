@@ -3,6 +3,8 @@ package io.github.shashankpatildev.kaffeine
 import io.github.shashankpatildev.kaffeine.internal.BoundedCache
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import java.util.concurrent.Executor
+import java.util.concurrent.ForkJoinPool
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration
 
@@ -65,6 +67,14 @@ public class KaffeineConfig<K : Any, V : Any> internal constructor() {
      * one caller being cancelled must never cancel a load that others are waiting for.
      */
     public var loadContext: CoroutineContext = Dispatchers.Default
+
+    /**
+     * Where the cache does its upkeep: applying buffered reads and writes to the eviction
+     * policy, evicting, and expiring. Doing it here means the threads calling get and put
+     * return sooner. Pass `Executor(Runnable::run)` to do it right away on the calling thread
+     * instead, which makes tests and simulations repeat exactly.
+     */
+    public var executor: Executor = ForkJoinPool.commonPool()
 
     internal fun validate() {
         require(maximumSize > 0) { "maximumSize must be above zero, but was $maximumSize" }

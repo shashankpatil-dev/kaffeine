@@ -2,6 +2,7 @@ package io.github.shashankpatildev.kaffeine.bench
 
 import com.github.benmanes.caffeine.cache.Caffeine
 import io.github.shashankpatildev.kaffeine.kaffeine
+import java.util.concurrent.Executor
 
 /*
  * Each simulation replays a whole trace through one cache and returns the number of hits.
@@ -24,6 +25,7 @@ fun simulateKaffeine(trace: LongArray, cacheSize: Int, doorkeeper: Boolean): Lon
     val cache = kaffeine<Long, Long> {
         maximumSize = cacheSize.toLong()
         this.doorkeeper = doorkeeper
+        executor = Executor(Runnable::run) // do upkeep right away on this thread, so runs are repeatable
     }
     return replay(trace) { key ->
         val hit = cache.getIfPresent(key) != null

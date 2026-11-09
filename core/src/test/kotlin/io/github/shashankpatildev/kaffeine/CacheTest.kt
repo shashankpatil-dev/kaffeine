@@ -1,5 +1,6 @@
 package io.github.shashankpatildev.kaffeine
 
+import java.util.concurrent.Executor
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -11,6 +12,7 @@ class CacheTest {
     private fun cache(maximumSize: Long = 100) = kaffeine<String, Int> {
         this.maximumSize = maximumSize
         recordStats = true
+        executor = Executor(Runnable::run) // upkeep right away, so every check sees it done
     }
 
     @Test

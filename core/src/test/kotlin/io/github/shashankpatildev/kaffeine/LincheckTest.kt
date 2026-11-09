@@ -2,6 +2,7 @@ package io.github.shashankpatildev.kaffeine
 
 import io.github.shashankpatildev.kaffeine.internal.BoundedCache
 import kotlinx.coroutines.Dispatchers
+import java.util.concurrent.Executor
 import org.jetbrains.lincheck.datastructures.IntGen
 import org.jetbrains.lincheck.datastructures.ModelCheckingOptions
 import org.jetbrains.lincheck.datastructures.Operation
@@ -24,8 +25,9 @@ class LincheckTest {
 
     private val cache = kaffeine<Int, Int> {
         maximumSize = 16
-        // Run loads right in the calling thread, so Lincheck controls every thread involved.
+        // Run loads and upkeep right in the calling thread, so Lincheck controls every thread involved.
         loadContext = Dispatchers.Unconfined
+        executor = Executor(Runnable::run)
     }
 
     @Operation
