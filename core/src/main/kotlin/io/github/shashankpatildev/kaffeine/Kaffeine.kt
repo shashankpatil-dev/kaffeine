@@ -35,7 +35,7 @@ public class KaffeineConfig internal constructor() {
      *
      * Off by default. On our seven test traces it helped at some cache sizes and hurt at others,
      * about -0.1 points on average, while costing about 10 extra bytes per entry.
-     * See bench/results/hit-ratio.
+     * See bench/RESULTS.md.
      */
     public var doorkeeper: Boolean = false
 

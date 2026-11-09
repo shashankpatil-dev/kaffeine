@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Runs the hit ratio simulator on every trace, at the cache sizes used in bench/results/hit-ratio.
+# Runs the hit ratio simulator on every trace, at the cache sizes used in bench/RESULTS.md.
 # Run scripts/download-traces.sh first. The two big traces (DS1 and S3) take several minutes each.
 
 set -euo pipefail
