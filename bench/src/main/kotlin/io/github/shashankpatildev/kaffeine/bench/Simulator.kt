@@ -30,7 +30,7 @@ Example:
 
 /**
  * Replays a trace through each policy at each cache size and prints the hit ratios.
- * The same table is saved under bench/results/hit-ratio/ as Markdown and CSV.
+ * The same table is also saved under bench/build/hit-ratio/ as Markdown and CSV, for charts.
  */
 fun main(args: Array<String>) {
     if (args.size !in 2..3) {
@@ -64,7 +64,7 @@ fun main(args: Array<String>) {
 }
 
 private fun save(report: Report, name: String) {
-    val dir = Path.of("bench", "results", "hit-ratio").createDirectories()
+    val dir = Path.of("bench", "build", "hit-ratio").createDirectories() // build/ is git-ignored
     dir.resolve("$name.md").writeText(report.toMarkdown())
     dir.resolve("$name.csv").writeText(report.toCsv())
     println("Saved to $dir/$name.md and $name.csv")
