@@ -28,4 +28,10 @@ public interface Cache<K : Any, V : Any> {
 
     /** A snapshot of the counters. Always zero unless `recordStats` was turned on. */
     public fun stats(): CacheStats
+
+    /**
+     * Does any pending bookkeeping right now, such as evicting entries above the maximum size.
+     * The cache does this by itself as it is used, so you rarely need to call it. Handy in tests.
+     */
+    public fun cleanUp()
 }
