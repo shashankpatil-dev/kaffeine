@@ -523,21 +523,26 @@ fun advance(now: Long, onExpired: (Node<K, V>) -> Unit) {
 ### 7.6 ReadBuffer: striped, lossy ring buffers
 
 ```
-stripes = ceilPow2(availableProcessors) × 4        (fixed; each stripe = 16 slots)
+stripes: starts at 1, doubles each time two readers collide on a slot,
+         up to ceilPow2(availableProcessors) × 4. Each stripe has 16 slots.
 
 stripe k:  [ n ][ n ][ n ][   ][   ] ... 16 slots (AtomicReferenceArray)
              ↑ readCounter (drainer only)   ↑ writeCounter (CAS by readers)
 ```
 
 ```kotlin
-fun offer(node): Int {                                       // SUCCESS / FULL / FAILED
-    val ring = stripes[spread(System.identityHashCode(Thread.currentThread())) and stripeMask]
+fun offer(node): Result {                                    // ADDED / FULL / LOST_RACE
+    val current = stripes                                    // @Volatile list, replaced when it grows
+    val ring = current[spread(System.identityHashCode(Thread.currentThread())) and (current.size - 1)]
     val head = ring.readCounter                              // @Volatile, written only by the drainer
     val tail = ring.writeCounter.get()
     if (tail - head >= 16) return FULL                       // caller then triggers maintenance
-    if (!ring.writeCounter.compareAndSet(tail, tail + 1)) return FAILED   // lost a race: just drop
+    if (!ring.writeCounter.compareAndSet(tail, tail + 1)) {  // another reader got here first
+        grow(current)                                        // so there are too few stripes
+        return LOST_RACE                                     // and this note is dropped
+    }
     ring.slots.lazySet((tail and 15).toInt(), node)
-    return SUCCESS
+    return ADDED
 }
 
 fun drainTo(consumer: (Node) -> Unit) {                     // under the lock, single consumer
@@ -554,28 +559,41 @@ fun drainTo(consumer: (Node) -> Unit) {                     // under the lock, s
 }
 ```
 
-> `shortcut:` fixed stripe count and no padding between counters. If JMH in Step 2 shows false sharing, add padding or a dynamic stripe count.
+**Why grow on demand:** maintenance runs on every write and walks every stripe. A fixed
+4 stripes per core (64 on a 12-core laptop) made every write pay for 64 stripe checks, even
+in a cache used by one thread. Starting at 1 keeps the quiet case cheap. This matches what
+Caffeine does.
+
+> `shortcut:` no padding between stripes. If profiling shows false sharing, pad the counters.
 
 ### 7.7 Write buffer and tasks
 
+Adding or removing a key queues a small closure. It checks the node's state before touching
+the policy, because tasks can run in a different order than the map changes happened.
+**Replacing the value of an existing key is not a task:** to the policy it is just another
+use of the key, so it goes through the read buffer like a read (Caffeine does the same).
+
 ```kotlin
-private sealed interface WriteTask { val node: Node<*, *> }
-private class Add(override val node: Node<K, V>) : WriteTask
-private class Update(override val node: Node<K, V>) : WriteTask
-private class Remove(override val node: Node<K, V>) : WriteTask
+private val writeBuffer = ConcurrentLinkedQueue<() -> Unit>()   // never drops
+private val pendingWrites = AtomicInteger()                     // tasks waiting to run
 
-private val writeBuffer = ConcurrentLinkedQueue<WriteTask>()   // never drops
+// put, new key:       { if (node.state == ALIVE) policy.onAdd(node) }
+// put, existing key:  afterRead(node)                (read buffer, may be dropped)
+// invalidate:         { policy.onRemove(node); node.state = DEAD }
 ```
-
-Applied **under the lock**:
 
 | Task | Rule |
 |------|------|
-| `Add(n)` | `if (n.state == ALIVE) { policy.onAdd(n); if (n.expiresAt != NEVER) wheel.schedule(n) }`. Otherwise skip (it was invalidated first) |
-| `Update(n)` | `if (n.state == ALIVE && n.queue != NONE) { policy.onAccess(n); wheel.reschedule(n) }`. If `queue == NONE`, the Add is still pending and will use the latest `expiresAt` |
-| `Remove(n)` | `if (n.queue != NONE) policy.onRemove(n); wheel.deschedule(n); n.state = DEAD` |
+| Add | Runs only if the node is still ALIVE. If it was invalidated first, the policy never sees it |
+| Remove | `onRemove` is a no-op when the node is not in any queue (evicted already, or its Add never ran), then DEAD |
 
-> `shortcut:` an unbounded `ConcurrentLinkedQueue`. Under an extreme write storm one drainer thread does extra work. Upgrade to a bounded MPSC queue with writer back-pressure if JMH shows growth.
+**Back-pressure:** if more than 1,024 tasks are waiting, the writer takes the lock with a
+blocking `lock()` and drains, instead of piling on more. Without this, the first JMH run at
+8 threads livelocked: writers queued tasks faster than one thread could apply them, so the
+queue grew without limit and the draining thread never got to stop.
+
+In Step 3, updates that change an entry's expiry time need the timer wheel, so they will go
+back to being write tasks when expiry is turned on.
 
 ### 7.8 BoundedCache: the operations
 
@@ -771,24 +789,29 @@ Output per trace: a Markdown table on stdout, also saved with a CSV under `bench
 ```kotlin
 @State(Scope.Benchmark)
 open class GetPutBenchmark {                                 // Kotlin: JMH classes must be `open`
-    @Param("kaffeine", "caffeine", "lhm-lock", "chm") lateinit var cacheType: String
-    private lateinit var cache: BenchCache                   // adapter interface: get(Int) / put(Int, Int)
-    private lateinit var keys: IntArray                      // 2^20 Zipf keys, pre-generated
+    @Param("kaffeine", "caffeine", "lhm-lock", "chm") lateinit var cache: String
+    @Param("read_100", "read_75", "write_100") lateinit var workload: String
+    private lateinit var target: BenchCache<Int, Int>        // adapter: get(K) / put(K, V)
 
-    @Setup fun setup() { cache = BenchCache.of(cacheType, maximumSize = ITEMS / 2); keys.forEach { cache.put(it, it) } }
+    @Setup fun setup() { target = BenchCache.create(cache, maximumSize = 2 * DISTINCT_KEYS); KEYS.forEach { target.put(it, it) } }
 
-    @State(Scope.Thread) open class Index { var i = ThreadLocalRandom.current().nextInt() }
+    @State(Scope.Thread) open class ThreadState { var index = ThreadLocalRandom.current().nextInt() }
 
-    @Benchmark @Threads(8)                                      fun read(t: Index) = cache.get(keys[t.i++ and MASK])
-    @Benchmark @Threads(8)                                      fun write(t: Index) = cache.put(keys[t.i++ and MASK], 0)
-    @Benchmark @Group("readWrite") @GroupThreads(6)             fun rwRead(t: Index) = cache.get(keys[t.i++ and MASK])
-    @Benchmark @Group("readWrite") @GroupThreads(2)             fun rwWrite(t: Index) = cache.put(keys[t.i++ and MASK], 0)
+    @Benchmark
+    fun getPut(thread: ThreadState): Int? {
+        val i = thread.index++
+        val key = KEYS[i and MASK]                           // 2^20 boxed Zipf picks over 2^16 keys
+        if ((i and 3) < readsOutOfFour) return target.get(key) // 4, 3 or 0 reads out of every 4 ops
+        target.put(key, key)
+        return null
+    }
 }
 ```
 
+- The cache holds every key, so reads always hit. We measure bookkeeping cost, not misses (the same setup Caffeine uses).
 - Returning the value from a `@Benchmark` method makes JMH consume it (same as `Blackhole.consume`).
-- Thread counts 1/4/8 are run with JMH's `-t` option. The 75/25 mix uses the `readWrite` group (6 readers + 2 writers).
-- `Zipf.kt`: inverse-CDF sampling over precomputed harmonic sums (s = 0.99), with the keys **scrambled** so the hot keys don't sit next to each other in memory.
+- A `workload` parameter mixes reads and writes inside one method, so every mix runs at any thread count. Thread counts 1/4/8 come from JMH's `-t` option in `scripts/benchmark.sh`.
+- `Zipf.kt`: inverse-CDF sampling over precomputed harmonic sums (s = 0.99), with keys **shuffled** so the hot keys are not just the small numbers.
 - Expiry cost: the same benchmark with `expireAfterWrite` turned on (Step 3).
 
 ---
