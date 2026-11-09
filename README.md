@@ -28,7 +28,7 @@ repositories {
 }
 
 dependencies {
-    implementation("com.github.shashankpatil-dev:kaffeine:v0.1.0")
+    implementation("com.github.shashankpatil-dev:kaffeine:v0.2.0")
 }
 ```
 
