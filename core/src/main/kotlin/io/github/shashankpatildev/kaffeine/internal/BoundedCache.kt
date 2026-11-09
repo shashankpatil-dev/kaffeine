@@ -5,6 +5,10 @@ import io.github.shashankpatildev.kaffeine.CacheStats
 import io.github.shashankpatildev.kaffeine.KaffeineConfig
 import io.github.shashankpatildev.kaffeine.internal.Node.Companion.NEVER
 import io.github.shashankpatildev.kaffeine.internal.Node.State
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.TimeUnit
@@ -31,6 +35,9 @@ import kotlin.math.abs
  *
  * The map is always the truth about what is cached. The policy may run a few operations
  * behind, and that is fine.
+ *
+ * Loads started by [get] are tracked in [inFlight], one per key, so callers asking for the
+ * same missing key share a single load.
  */
 internal class BoundedCache<K : Any, V : Any>(config: KaffeineConfig<K, V>) : Cache<K, V> {
 
@@ -45,6 +52,12 @@ internal class BoundedCache<K : Any, V : Any>(config: KaffeineConfig<K, V>) : Ca
         evict = ::evict,
     )
     private val stats = if (config.recordStats) StatsCounter() else null
+
+    // Loading. Loads run in the cache's own scope, not in a caller's, so a caller that is
+    // cancelled cannot cancel a load others are waiting for. SupervisorJob keeps one failed
+    // load from cancelling the rest.
+    private val inFlight = ConcurrentHashMap<K, CompletableDeferred<V>>()
+    private val loadScope = CoroutineScope(SupervisorJob() + config.loadContext)
 
     // Expiry. Times are nanoseconds since this cache was created, so they start at zero and
     // only grow. That keeps the comparisons and the wheel's bit shifts simple.
@@ -75,43 +88,34 @@ internal class BoundedCache<K : Any, V : Any>(config: KaffeineConfig<K, V>) : Ca
         return node.value
     }
 
-    override fun put(key: K, value: V) {
-        // Work out the expiry time first, so a slow expireAfter function never runs inside the map's lock.
-        val expiresAt = if (wheel != null) expiresAt(now(), key, value) else NEVER
-        var added: Node<K, V>? = null
-        var oldExpiresAt = NEVER
-        val node = data.compute(key) { _, existing ->
-            if (existing == null) {
-                Node(key, value, expiresAt).also { added = it }
-            } else {
-                oldExpiresAt = existing.expiresAt
-                existing.value = value
-                existing.expiresAt = expiresAt
-                existing
-            }
-        }!!
+    override suspend fun get(key: K, loader: suspend (K) -> V): V {
+        getIfPresent(key)?.let { return it }
 
-        when {
-            // If the node was removed again before this task runs, the policy never needs to see it.
-            node === added -> afterWrite {
-                if (node.state == State.ALIVE) {
-                    wheel?.schedule(node)
-                    policy.onAdd(node)
-                }
-            }
-            // A new expiry time means the node has to move in the wheel, which only maintenance may do.
-            // Small moves are skipped: if the wheel fires a little early, expire() checks again.
-            wheel != null && abs(expiresAt - oldExpiresAt) > EXPIRY_TOLERANCE -> afterWrite {
-                if (node.state == State.ALIVE) {
-                    wheel.schedule(node)
-                    policy.onAccess(node)
-                }
-            }
-            else -> afterRead(node)
+        var started = false
+        val load = inFlight.computeIfAbsent(key) {
+            started = true
+            CompletableDeferred() // just an empty box for now, nothing slow happens inside the map's lock
         }
+        if (started) {
+            // Another load may have finished between our miss above and registering this one.
+            val justLoaded = freshValue(key)
+            if (justLoaded != null) {
+                inFlight.remove(key, load)
+                load.complete(justLoaded)
+            } else {
+                startLoad(key, load, loader)
+            }
+        }
+        // Everyone asking for this key waits on the same box. Waiting suspends, it does not block a thread.
+        return load.await()
+    }
+
+    override fun put(key: K, value: V) {
+        store(key, value, load = null)
     }
 
     override fun invalidate(key: K) {
+        inFlight.remove(key) // a load that is still running will not store its value
         val node = data.remove(key) ?: return
         node.state = State.RETIRED
         afterWrite {
@@ -122,6 +126,7 @@ internal class BoundedCache<K : Any, V : Any>(config: KaffeineConfig<K, V>) : Ca
     }
 
     override fun invalidateAll() {
+        inFlight.clear()
         for (key in data.keys) invalidate(key)
     }
 
@@ -132,6 +137,78 @@ internal class BoundedCache<K : Any, V : Any>(config: KaffeineConfig<K, V>) : Ca
     }
 
     override fun stats(): CacheStats = stats?.snapshot() ?: CacheStats(0, 0, 0)
+
+    private fun startLoad(key: K, load: CompletableDeferred<V>, loader: suspend (K) -> V) {
+        loadScope.launch {
+            try {
+                val value = loader(key)
+                store(key, value, load)
+                inFlight.remove(key, load)
+                load.complete(value)
+            } catch (e: Throwable) {
+                // Failures are not cached: drop the load so the next caller tries again.
+                inFlight.remove(key, load)
+                load.completeExceptionally(e)
+            }
+        }
+    }
+
+    /**
+     * Writes the value into the map and tells the policy about it.
+     *
+     * A finished load passes itself as [load], and its value is only stored if that load is
+     * still the registered one for the key. invalidate() unregisters the load before it removes
+     * the key, and we check inside the map's lock, so an invalidate during a load always wins.
+     */
+    private fun store(key: K, value: V, load: CompletableDeferred<V>?) {
+        // Work out the expiry time first, so a slow expireAfter function never runs inside the map's lock.
+        val expiresAt = if (wheel != null) expiresAt(now(), key, value) else NEVER
+        var added: Node<K, V>? = null
+        var updated: Node<K, V>? = null
+        var oldExpiresAt = NEVER
+        data.compute(key) { _, existing ->
+            when {
+                load != null && inFlight[key] !== load -> existing // invalidated while loading, leave the map alone
+                existing == null -> Node(key, value, expiresAt).also { added = it }
+                else -> existing.also {
+                    oldExpiresAt = it.expiresAt
+                    it.value = value
+                    it.expiresAt = expiresAt
+                    updated = it
+                }
+            }
+        }
+
+        added?.let { node ->
+            // If the node was removed again before this task runs, the policy never needs to see it.
+            afterWrite {
+                if (node.state == State.ALIVE) {
+                    wheel?.schedule(node)
+                    policy.onAdd(node)
+                }
+            }
+        }
+        updated?.let { node ->
+            // A new expiry time means the node has to move in the wheel, which only maintenance may do.
+            // Small moves are skipped: if the wheel fires a little early, expire() checks again.
+            if (wheel != null && abs(expiresAt - oldExpiresAt) > EXPIRY_TOLERANCE) {
+                afterWrite {
+                    if (node.state == State.ALIVE) {
+                        wheel.schedule(node)
+                        policy.onAccess(node)
+                    }
+                }
+            } else {
+                afterRead(node)
+            }
+        }
+    }
+
+    /** The cached value if it is there and not expired, without counting a hit or a miss. */
+    private fun freshValue(key: K): V? {
+        val node = data[key] ?: return null
+        return if (wheel != null && node.isExpired(now())) null else node.value
+    }
 
     private fun miss(): V? {
         stats?.misses?.increment()

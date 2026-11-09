@@ -9,7 +9,11 @@ kotlin {
 }
 
 dependencies {
+    // api, because loadContext in the public config takes a coroutine dispatcher
+    api(libs.kotlinx.coroutines.core)
+
     testImplementation(kotlin("test"))
+    testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.lincheck)
 }
 

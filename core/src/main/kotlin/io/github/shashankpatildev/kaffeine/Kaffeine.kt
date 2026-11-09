@@ -1,6 +1,9 @@
 package io.github.shashankpatildev.kaffeine
 
 import io.github.shashankpatildev.kaffeine.internal.BoundedCache
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration
 
 /**
@@ -56,11 +59,19 @@ public class KaffeineConfig<K : Any, V : Any> internal constructor() {
     /** Where the cache gets the time from. Tests can pass a fake one to control expiry. */
     public var ticker: Ticker = Ticker.SYSTEM
 
+    /**
+     * Where the loaders passed to [Cache.get] run. If your loader blocks a thread (JDBC, file
+     * reads), use Dispatchers.IO. It must not contain a Job, because the cache owns its loads:
+     * one caller being cancelled must never cancel a load that others are waiting for.
+     */
+    public var loadContext: CoroutineContext = Dispatchers.Default
+
     internal fun validate() {
         require(maximumSize > 0) { "maximumSize must be above zero, but was $maximumSize" }
         val expiryModes = listOfNotNull(expireAfterWrite, expireAfterAccess, expireAfter)
         require(expiryModes.size <= 1) { "Pick at most one of expireAfterWrite, expireAfterAccess and expireAfter" }
         expireAfterWrite?.let { require(it.isPositive()) { "expireAfterWrite must be above zero, but was $it" } }
         expireAfterAccess?.let { require(it.isPositive()) { "expireAfterAccess must be above zero, but was $it" } }
+        require(loadContext[Job] == null) { "loadContext must not contain a Job, the cache manages its own loads" }
     }
 }

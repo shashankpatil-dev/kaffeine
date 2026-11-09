@@ -14,6 +14,23 @@ public interface Cache<K : Any, V : Any> {
     /** Returns the value for [key], or null if the key is not in the cache. */
     public fun getIfPresent(key: K): V?
 
+    /**
+     * Returns the value for [key], loading it with [loader] if it is missing or expired.
+     *
+     * However many callers ask for the same missing key at once, [loader] runs only once and
+     * they all get its result. This stops a crowd of requests from hitting the database at
+     * the same moment (a "cache stampede").
+     *
+     * - If the loader throws, every waiting caller gets the exception and nothing is cached,
+     *   so the next call tries again.
+     * - If a caller is cancelled while waiting, only that caller stops. The load keeps going
+     *   for the others, and its value is still cached.
+     * - If the key is invalidated while it loads, the callers still get the value, but it is
+     *   not cached.
+     * - The loader must not call [get] for the same key, or it would wait for itself forever.
+     */
+    public suspend fun get(key: K, loader: suspend (K) -> V): V
+
     /** Adds the value, or replaces the old one. Adding may evict another entry. */
     public fun put(key: K, value: V)
 
