@@ -56,8 +56,8 @@ class SimulatorTest {
             val best = simulateBelady(trace, size)
             val others = mapOf(
                 "lru" to simulateLru(trace, size),
-                "kaffeine" to simulateKaffeine(trace, size, doorkeeper = true),
-                "kaffeine-no-doorkeeper" to simulateKaffeine(trace, size, doorkeeper = false),
+                "kaffeine" to simulateKaffeine(trace, size, doorkeeper = false),
+                "kaffeine-doorkeeper" to simulateKaffeine(trace, size, doorkeeper = true),
                 "caffeine" to simulateCaffeine(trace, size),
             )
             for ((name, hits) in others) {

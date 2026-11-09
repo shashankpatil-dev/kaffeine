@@ -32,8 +32,12 @@ public class KaffeineConfig internal constructor() {
     /**
      * Put a small Bloom filter in front of the frequency sketch, so keys that are seen only
      * once never take space in it. This is the "doorkeeper" idea from the TinyLFU paper.
+     *
+     * Off by default. On our seven test traces it helped at some cache sizes and hurt at others,
+     * about -0.1 points on average, while costing about 10 extra bytes per entry.
+     * See bench/results/hit-ratio.
      */
-    public var doorkeeper: Boolean = true
+    public var doorkeeper: Boolean = false
 
     internal fun validate() {
         require(maximumSize > 0) { "maximumSize must be above zero, but was $maximumSize" }

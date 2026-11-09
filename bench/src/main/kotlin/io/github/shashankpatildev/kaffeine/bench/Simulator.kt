@@ -11,8 +11,8 @@ import kotlin.time.measureTimedValue
 /** Every policy the simulator can run, by the name used on the command line. */
 private val POLICIES: Map<String, (LongArray, Int) -> Long> = linkedMapOf(
     "lru" to ::simulateLru,
-    "kaffeine" to { trace, size -> simulateKaffeine(trace, size, doorkeeper = true) },
-    "kaffeine-no-doorkeeper" to { trace, size -> simulateKaffeine(trace, size, doorkeeper = false) },
+    "kaffeine" to { trace, size -> simulateKaffeine(trace, size, doorkeeper = false) },
+    "kaffeine-doorkeeper" to { trace, size -> simulateKaffeine(trace, size, doorkeeper = true) },
     "caffeine" to ::simulateCaffeine,
     "belady" to ::simulateBelady,
 )
@@ -22,7 +22,7 @@ Usage: simulator <trace file> <cache sizes> [policies]
 
   trace file   an ARC (.lis) or LIRS (.trace or .trace.gz) trace, see scripts/download-traces.sh
   cache sizes  comma separated, for example 1000,2000,5000
-  policies     comma separated, default is all of: lru, kaffeine, kaffeine-no-doorkeeper, caffeine, belady
+  policies     comma separated, default is all of: lru, kaffeine, kaffeine-doorkeeper, caffeine, belady
 
 Example:
   ./gradlew :bench:run --args="traces/OLTP.lis 1000,2000,5000"

@@ -123,7 +123,7 @@ public class KaffeineConfig<K : Any, V : Any> internal constructor() {
     public var recordStats: Boolean = false
     public var ticker: Ticker = Ticker.SYSTEM
     public var loadContext: CoroutineContext = Dispatchers.Default
-    public var doorkeeper: Boolean = true                        // default decided in Step 1 by the simulator
+    public var doorkeeper: Boolean = false                       // off: no clear gain on our traces (Step 1 results)
 }
 
 public fun <K : Any, V : Any> kaffeine(configure: KaffeineConfig<K, V>.() -> Unit): Cache<K, V>
