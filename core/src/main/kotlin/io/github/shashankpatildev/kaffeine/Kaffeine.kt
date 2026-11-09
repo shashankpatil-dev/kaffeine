@@ -4,7 +4,6 @@ import io.github.shashankpatildev.kaffeine.internal.BoundedCache
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import java.util.concurrent.Executor
-import java.util.concurrent.ForkJoinPool
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration
 
@@ -70,11 +69,13 @@ public class KaffeineConfig<K : Any, V : Any> internal constructor() {
 
     /**
      * Where the cache does its upkeep: applying buffered reads and writes to the eviction
-     * policy, evicting, and expiring. Doing it here means the threads calling get and put
-     * return sooner. Pass `Executor(Runnable::run)` to do it right away on the calling thread
-     * instead, which makes tests and simulations repeat exactly.
+     * policy, evicting, and expiring.
+     *
+     * By default it runs right away on the calling thread. We also tried a background pool,
+     * the way Caffeine does it, and for this cache it made reads slower (see bench/RESULTS.md).
+     * Pass a pool such as `ForkJoinPool.commonPool()` to move the work off the calling threads.
      */
-    public var executor: Executor = ForkJoinPool.commonPool()
+    public var executor: Executor = Executor(Runnable::run)
 
     internal fun validate() {
         require(maximumSize > 0) { "maximumSize must be above zero, but was $maximumSize" }

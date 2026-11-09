@@ -3,6 +3,7 @@ package io.github.shashankpatildev.kaffeine
 import io.github.shashankpatildev.kaffeine.internal.BoundedCache
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.ForkJoinPool
 import kotlin.concurrent.thread
 import kotlin.random.Random
 import kotlin.test.Test
@@ -19,7 +20,10 @@ class StressTest {
 
     @Test
     fun `stays correct and bounded under many threads`() {
-        val cache = kaffeine<Int, Int> { maximumSize = 100 }
+        val cache = kaffeine<Int, Int> {
+            maximumSize = 100
+            executor = ForkJoinPool.commonPool() // upkeep on a pool too: the setup with the most moving parts
+        }
         val failures = ConcurrentLinkedQueue<Throwable>()
         val start = CountDownLatch(1)
 

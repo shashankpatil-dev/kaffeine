@@ -1,6 +1,7 @@
 package io.github.shashankpatildev.kaffeine
 
 import java.util.concurrent.Executor
+import java.util.concurrent.ForkJoinPool
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
@@ -12,8 +13,20 @@ import kotlin.time.Duration.Companion.seconds
 class MaintenanceTest {
 
     @Test
-    fun `upkeep runs in the background by default`() {
+    fun `upkeep runs on the calling thread by default`() {
         val cache = kaffeine<Int, Int> { maximumSize = 100 }
+
+        repeat(10_000) { cache.put(it, it) }
+
+        assertEquals(100, cache.estimatedSize()) // already done, no cleanUp() needed
+    }
+
+    @Test
+    fun `upkeep can run on a background pool`() {
+        val cache = kaffeine<Int, Int> {
+            maximumSize = 100
+            executor = ForkJoinPool.commonPool()
+        }
 
         repeat(10_000) { cache.put(it, it) }
 
