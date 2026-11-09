@@ -63,6 +63,7 @@ Kotlin backend services (Ktor, Spring WebFlux, coroutines) need an in-memory cac
 | FR-11 | Pluggable `Ticker` (time source), so tests can control time |
 | FR-12 | Pluggable `loadContext` (dispatcher where loaders run). Default: `Dispatchers.Default` |
 | FR-13 | Null keys and values are not allowed (`K : Any, V : Any`) |
+| FR-14 | Pluggable `executor` for maintenance. Default: the calling thread, which measured faster than a pool (added after v0.1.0) |
 
 ## 6. Non-functional requirements
 
@@ -116,7 +117,6 @@ val http = kaffeine<String, Response> {
 | Weak/soft references | Complex GC interplay, small learning value |
 | `refreshAfterWrite`, bulk `getAll` | Not needed for the core story |
 | Removal listeners | Stretch goal |
-| Adaptive window (hill climbing) | **Stretch goal** in Step 4 |
 | JCache (JSR-107), Kotlin Multiplatform | Too much surface area for v1 |
 
 ## 9. Success metrics (definition of done)
@@ -133,7 +133,7 @@ val http = kaffeine<String, Response> {
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| Without an adaptive window, we may trail LRU on recency-heavy traces | Weaker hit-ratio story | Report it honestly. Hill climbing is a stretch goal |
+| Without an adaptive window, we may trail LRU on recency-heavy traces | Weaker hit-ratio story | Done after v0.1.0: a hill climber cut the OLTP gap to Caffeine from 3.2 to 1.2 points |
 | Concurrency bugs (races between add, remove and evict) | Wrong results, memory leaks | Node lifecycle states, Lincheck, stress tests, simple v1 first |
 | Benchmarks give misleading numbers | Loss of credibility | JMH with forks and warmup, Blackhole, Zipf keys, publish raw JSON |
 | Scope creep (copying all of Caffeine) | Never finishes | Strict out-of-scope list (§8), 4-step plan |

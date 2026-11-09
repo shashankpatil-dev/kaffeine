@@ -124,8 +124,9 @@ flowchart LR
 
 ### Stretch (only if everything above is done)
 - [ ] Profile the read path against Caffeine (JFR / async-profiler): background maintenance, padding, cheaper stripe choice
-- [ ] Adaptive window (hill climbing), then re-run the simulator and compare
-- [ ] Bounded write buffer with back-pressure
+- [x] Adaptive window (hill climbing), then re-run the simulator and compare (OLTP gap to Caffeine 3.2 → 1.2 points)
+- [x] Maintenance on a background executor, like Caffeine (built and measured: slower for reads, so it is an option and the default stays on the calling thread)
+- [x] Bounded write buffer with back-pressure (done in Step 2, after the livelock)
 - [ ] Removal listener
 - [ ] Measure memory per entry (JOL)
 

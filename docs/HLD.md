@@ -122,13 +122,13 @@ This is what makes reads fast: **a read never takes a lock**.
 |---|----------|-------------------------|--------------|
 | D1 | `ConcurrentHashMap` stores the data | A custom hash table | Battle-tested, lock-free reads, atomic `compute*` |
 | D2 | The policy is updated **through buffers**, under `tryLock` | Lock on every operation (v1) | Reads never block. Built as v1 → v2 so the speedup can be **measured** |
-| D3 | **W-TinyLFU** eviction | LRU, LFU, ARC | Best hit ratio across mixed workloads, with small memory |
+| D3 | **W-TinyLFU** eviction, with the window resized by a **hill climber** | LRU, LFU, ARC; a fixed 1% window | Best hit ratio across mixed workloads, with small memory. The fixed window lost 3.2 points to Caffeine on OLTP; the climber brings that to 1.2 |
 | D4 | **Count-Min Sketch with 4-bit counters** + periodic halving | An exact counter map | About 8 bytes per entry. Aging handles changing popularity |
 | D5 | **Doorkeeper Bloom filter** is optional (a flag) | Always on / never | Comes from the TinyLFU paper. The **simulator decides** the default with data |
 | D6 | **One timing wheel for all expiry modes** | Order queues for fixed TTL plus a wheel for variable TTL (Caffeine) | One mechanism, less code, still O(1) |
 | D7 | Expired entries are **checked on read** as well as cleaned by the wheel | Wheel only | The wheel is coarse (~1 s). The read check guarantees an expired value is never returned |
 | D8 | Coalescing with **`CompletableDeferred` in an `inFlight` map**; the load runs in a **cache-owned `SupervisorJob` scope** | Run the load in the caller's coroutine | One caller cancelling must not kill the load for the others |
-| D9 | Maintenance runs **on the calling thread** (amortized) | A background executor (Caffeine uses ForkJoinPool) | Deterministic and simpler. No thread pool to manage |
+| D9 | Maintenance runs through an **`Executor`** setting, with an atomic flag so only one job waits at a time. **Default: the calling thread** | A background pool by default, like Caffeine | We built and measured the pool version: it made 8-thread reads drop from 53% to 39% of Caffeine (hand-offs wake pool threads, and notes are dropped while a job waits). So the pool is an option, not the default |
 | D10 | Injectable **`Ticker`** | `System.nanoTime()` directly | Expiry tests run instantly and deterministically |
 | D11 | **Simulator first** | Build the concurrent cache first | The policy is checked on real traces before concurrency adds noise |
 | D12 | No dependencies besides coroutines | Use helper libraries | Keeps the library small, and shows we can build the pieces ourselves |

@@ -123,6 +123,7 @@ public class KaffeineConfig<K : Any, V : Any> internal constructor() {
     public var recordStats: Boolean = false
     public var ticker: Ticker = Ticker.SYSTEM
     public var loadContext: CoroutineContext = Dispatchers.Default
+    public var executor: Executor = Executor(Runnable::run)      // where maintenance runs; a pool is optional (measured slower)
     public var doorkeeper: Boolean = false                       // off: no clear gain on our traces (Step 1 results)
 }
 
@@ -396,10 +397,20 @@ The doorkeeper's memory cost (~10 B per entry) vs its hit-ratio gain is **measur
 **Sizes** (counts, not weights):
 
 ```
-windowMax    = max(1, maximumSize / 100)         // 1%
-mainMax      = maximumSize - windowMax           // 99%
+windowMax    = max(1, maximumSize / 100)         // 1% at the start; the hill climber moves it
+mainMax      = maximumSize - windowMax           // the rest
 protectedMax = mainMax * 80 / 100                // 80% of main, probation gets the rest
 ```
+
+**Adaptive window (hill climber).** `onAccess` counts a hit and `onAdd` counts a miss. Every
+`10 × maximumSize` requests, `climbIfDue()` compares the hit rate with the previous period:
+if it went up, the window moves the same way again; if it went down, it turns around. The
+step starts at 6.25% of the cache, shrinks by 2% per period, and restarts at full size when
+the hit rate jumps by 5 points or more (the same constants as Caffeine). The first step is a
+shrink, so the window stays at its floor until the hit rate drops. `resizeWindow()` only moves
+entries between the lists (window oldest → probation, or main oldest → window) and demotes
+protected overflow; it never evicts. Measured: the OLTP gap to Caffeine went from 3.2 to 1.2
+points. Starting with a grow step instead cost up to 2 points on S3 and loop.
 
 ```
               ┌──────────── maximumSize ────────────────────────────┐
@@ -654,6 +665,12 @@ override fun invalidateAll() { inFlight.clear(); data.keys.forEach(::invalidate)
 ```
 
 #### Maintenance
+
+Writers and full read stripes call `scheduleMaintenance()`. It sets an atomic "scheduled" flag
+(only one job waits at a time) and hands `tryMaintenance()` to the configured `executor`. After
+the job clears the flag it checks the write buffer once more, so a write that slipped in at the
+last moment is never stranded. If the executor refuses the job, it runs on the calling thread.
+Back-pressure and `cleanUp()` still take the lock directly on the caller.
 
 ```kotlin
 private fun tryMaintenance() {
