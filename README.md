@@ -45,7 +45,7 @@ scripts/simulate-all.sh                                       # every trace, eve
 
 Results and what they mean: [bench/RESULTS.md](bench/RESULTS.md). In short, Kaffeine
 beats LRU by 12 to 58 points on five of the seven traces, roughly ties it on the other two, and
-ends up 0.13 points behind Caffeine on average.
+is level with Caffeine on average.
 
 ## Design docs
 

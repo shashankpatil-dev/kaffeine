@@ -29,15 +29,15 @@ Average difference in hit ratio points over the cache sizes of each trace.
 
 | Trace | Kind | Kaffeine vs LRU | Kaffeine vs Caffeine | Doorkeeper effect | Gap to optimal |
 |-------|------|---:|---:|---:|---:|
-| DS1 | database (ARC) | +20.4 | +0.76 | +0.21 | 4.1 |
-| S3 | web search (ARC) | +18.1 | +1.39 | -0.42 | 14.6 |
-| OLTP | database (ARC) | -0.3 | -3.19 | -0.07 | 15.5 |
-| loop | loop (LIRS) | +57.8 | -1.05 | -0.42 | 3.9 |
-| gli | mixed (LIRS) | +21.7 | +3.63 | +0.19 | 1.4 |
-| multi2 | mixed (LIRS) | +11.8 | -0.30 | +0.06 | 4.4 |
-| sprite | file system (LIRS) | +1.7 | -1.37 | -0.06 | 15.1 |
+| DS1 | database (ARC) | +20.2 | +0.59 | +0.41 | 4.2 |
+| S3 | web search (ARC) | +18.1 | +1.39 | -0.43 | 14.6 |
+| OLTP | database (ARC) | -0.3 | -3.22 | -0.08 | 15.5 |
+| loop | loop (LIRS) | +58.5 | -0.31 | -1.38 | 3.2 |
+| gli | mixed (LIRS) | +21.6 | +3.59 | +0.05 | 1.5 |
+| multi2 | mixed (LIRS) | +11.9 | -0.29 | -0.34 | 4.3 |
+| sprite | file system (LIRS) | +1.8 | -0.75 | -0.27 | 14.9 |
 
-Over all 29 data points, Kaffeine is **0.13 points behind Caffeine on average**.
+Over all 29 data points, Kaffeine and Caffeine are **level on average** (+0.03 points).
 
 ### What the numbers say
 
@@ -52,11 +52,18 @@ Kaffeine is 3.2 points behind Caffeine. Our window is fixed at 1% of the cache. 
 grows or shrinks its window while running (hill climbing), which lets it act more like LRU
 on traces like this one. Adding that is a stretch goal in [the plan](../docs/PLAN.md).
 
-**The doorkeeper did not earn its keep.** It helped at only 15 of the 29 points, and on
-average it moved the hit ratio by about -0.1 points, while costing about 10 extra bytes per entry. The
+**The doorkeeper did not earn its keep.** It helped at only 12 of the 29 points and lowered
+the hit ratio by about 0.3 points on average, while costing about 10 extra bytes per entry. The
 TinyLFU paper uses it so the sketch can be made smaller for the same accuracy. We keep the
 sketch at full size, so the doorkeeper only adds noise from its false positives and from
 being cleared at every reset. It is off by default and stays available as an option.
+
+**The read buffer barely changes the hit ratio.** These numbers come from the buffered v2
+cache, where reads only leave a note that may be dropped. Compared with the v1 cache, which
+updated the policy on every read, the hit ratio moved by +0.1 points on average, and 25 of
+the 29 points moved by less than half a point. The exception is loop, which swung from -1.7
+to +3.9 points: it is a strict cycle, so the exact order in which the policy sees accesses
+decides which keys stay.
 
 ### Per trace
 
@@ -66,65 +73,65 @@ Hit ratio in %, higher is better.
 
 | Cache size | lru | kaffeine | kaffeine-doorkeeper | caffeine | belady |
 |---:|---:|---:|---:|---:|---:|
-| 1,000,000 | 3.09 | 14.36 | 14.65 | 12.38 | 20.19 |
-| 2,000,000 | 10.74 | 28.57 | 29.14 | 28.15 | 31.79 |
-| 4,000,000 | 20.24 | 45.27 | 45.21 | 45.29 | 48.09 |
-| 8,000,000 | 43.03 | 70.38 | 70.41 | 69.72 | 74.93 |
+| 1,000,000 | 3.09 | 14.33 | 15.01 | 12.45 | 20.19 |
+| 2,000,000 | 10.74 | 28.45 | 29.13 | 28.20 | 31.79 |
+| 4,000,000 | 20.24 | 44.96 | 45.21 | 45.35 | 48.09 |
+| 8,000,000 | 43.03 | 70.34 | 70.38 | 69.72 | 74.93 |
 
 #### S3 (16,407,702 requests)
 
 | Cache size | lru | kaffeine | kaffeine-doorkeeper | caffeine | belady |
 |---:|---:|---:|---:|---:|---:|
-| 100,000 | 2.33 | 11.90 | 10.86 | 10.93 | 25.42 |
-| 200,000 | 4.63 | 22.99 | 22.40 | 21.29 | 39.79 |
-| 400,000 | 12.04 | 42.65 | 42.53 | 41.07 | 59.96 |
-| 800,000 | 56.60 | 70.55 | 70.62 | 69.24 | 81.27 |
+| 100,000 | 2.33 | 11.90 | 10.84 | 10.94 | 25.42 |
+| 200,000 | 4.63 | 22.99 | 22.42 | 21.33 | 39.79 |
+| 400,000 | 12.04 | 42.65 | 42.48 | 41.03 | 59.96 |
+| 800,000 | 56.60 | 70.52 | 70.59 | 69.20 | 81.27 |
 
 #### OLTP (914,145 requests)
 
 | Cache size | lru | kaffeine | kaffeine-doorkeeper | caffeine | belady |
 |---:|---:|---:|---:|---:|---:|
-| 1,000 | 32.83 | 35.63 | 35.49 | 39.98 | 53.61 |
-| 2,000 | 42.47 | 42.11 | 42.10 | 46.33 | 60.40 |
-| 5,000 | 53.65 | 52.52 | 52.34 | 54.43 | 68.27 |
-| 10,000 | 60.70 | 59.83 | 59.75 | 62.66 | 73.02 |
-| 15,000 | 64.63 | 62.86 | 62.93 | 65.50 | 75.14 |
+| 1,000 | 32.83 | 35.60 | 35.48 | 40.04 | 53.61 |
+| 2,000 | 42.47 | 42.18 | 42.13 | 46.34 | 60.40 |
+| 5,000 | 53.65 | 52.49 | 52.28 | 54.42 | 68.27 |
+| 10,000 | 60.70 | 59.84 | 59.73 | 62.68 | 73.02 |
+| 15,000 | 64.63 | 62.82 | 62.93 | 65.53 | 75.14 |
 
 #### loop (505,500 requests)
 
 | Cache size | lru | kaffeine | kaffeine-doorkeeper | caffeine | belady |
 |---:|---:|---:|---:|---:|---:|
-| 250 | 0.00 | 24.17 | 20.05 | 22.41 | 24.63 |
-| 500 | 0.00 | 48.83 | 48.85 | 47.76 | 49.36 |
-| 750 | 0.00 | 64.64 | 65.66 | 68.03 | 74.04 |
-| 1,000 | 0.00 | 93.39 | 94.79 | 97.02 | 98.71 |
+| 250 | 0.00 | 24.19 | 20.66 | 22.41 | 24.63 |
+| 500 | 0.00 | 47.15 | 45.17 | 47.76 | 49.36 |
+| 750 | 0.00 | 65.40 | 65.58 | 67.96 | 74.04 |
+| 1,000 | 0.00 | 97.31 | 97.12 | 97.16 | 98.71 |
 
 #### gli (6,015 requests)
 
 | Cache size | lru | kaffeine | kaffeine-doorkeeper | caffeine | belady |
 |---:|---:|---:|---:|---:|---:|
-| 250 | 0.91 | 16.14 | 16.34 | 14.98 | 17.64 |
-| 500 | 0.95 | 33.15 | 33.60 | 27.78 | 34.26 |
-| 1,000 | 11.21 | 50.12 | 50.22 | 42.13 | 53.13 |
+| 250 | 0.91 | 16.19 | 16.31 | 14.68 | 17.64 |
+| 500 | 0.95 | 33.23 | 33.22 | 27.78 | 34.26 |
+| 1,000 | 11.21 | 49.53 | 49.61 | 42.13 | 53.13 |
 | 2,000 | 57.41 | 57.96 | 57.96 | 57.96 | 57.96 |
 
 #### multi2 (26,311 requests)
 
 | Cache size | lru | kaffeine | kaffeine-doorkeeper | caffeine | belady |
 |---:|---:|---:|---:|---:|---:|
-| 500 | 35.98 | 47.71 | 46.91 | 49.10 | 53.60 |
-| 1,000 | 47.80 | 56.01 | 57.11 | 57.98 | 62.16 |
-| 2,000 | 49.00 | 69.67 | 69.65 | 69.36 | 74.65 |
+| 500 | 35.98 | 47.72 | 47.17 | 49.10 | 53.60 |
+| 1,000 | 47.80 | 56.24 | 56.35 | 57.98 | 62.16 |
+| 2,000 | 49.00 | 69.50 | 68.63 | 69.36 | 74.65 |
 | 3,000 | 71.18 | 77.95 | 77.92 | 76.13 | 78.40 |
 
 #### sprite (133,996 requests)
 
 | Cache size | lru | kaffeine | kaffeine-doorkeeper | caffeine | belady |
 |---:|---:|---:|---:|---:|---:|
-| 100 | 21.58 | 31.20 | 30.26 | 31.72 | 50.80 |
-| 250 | 48.84 | 55.34 | 55.58 | 54.83 | 74.48 |
-| 500 | 78.30 | 74.64 | 74.92 | 78.11 | 87.88 |
-| 1,000 | 90.64 | 84.84 | 85.03 | 86.86 | 93.24 |
+| 100 | 21.58 | 31.37 | 30.47 | 31.49 | 50.80 |
+| 250 | 48.84 | 55.45 | 55.49 | 55.12 | 74.48 |
+| 500 | 78.30 | 74.94 | 74.60 | 76.22 | 87.88 |
+| 1,000 | 90.64 | 84.94 | 85.05 | 86.86 | 93.24 |
 
 ### Traces
 
@@ -177,3 +184,28 @@ scripts/benchmark.sh
 v1 takes the policy lock on every read and every write. So it gets slower as threads are
 added: from 13.1 million reads per second on one thread down to 6.5 million on eight, while
 Caffeine reaches 207 million. Every reader is waiting in line for the same lock.
+
+### v2: buffered policy updates
+
+Only Kaffeine changed, so only Kaffeine was measured again, with the same settings. Compare
+with the other caches in the v1 table above.
+
+| Workload | 1 thread | 4 threads | 8 threads | vs v1 at 8 threads | vs Caffeine at 8 threads |
+|---|---:|---:|---:|---:|---:|
+| read_100 | 13.2 | 50.3 | 77.2 | 11.9× | 37% |
+| read_75 | 9.9 | 30.4 | 55.6 | 9.6× | 53% |
+| write_100 | 9.2 | 25.5 | 37.7 | 5.9× | 64% |
+
+Reads now leave a note in a lock-free striped buffer instead of taking the lock, and a
+replaced value counts as a read. So v2 gets faster as threads are added, where v1 got slower.
+
+The first v2 run livelocked at 8 threads. Every write queued a task, writers queued them
+faster than the one draining thread could apply them, and the queue grew without limit.
+Two changes fixed it: replacing a value goes through the read buffer, and once 1,024 tasks
+are waiting a writer stops to help drain instead of adding more.
+
+Kaffeine is still behind Caffeine, by about the same ratio at one thread as at eight. So the
+gap is the cost of each operation, not how it scales. Two likely reasons: Caffeine applies
+policy updates on a background thread pool, while Kaffeine does it on the calling thread,
+and Caffeine's read path is more tuned (padding against false sharing, cheaper per-thread
+stripe choice). Profiling this is on the list for step 4.

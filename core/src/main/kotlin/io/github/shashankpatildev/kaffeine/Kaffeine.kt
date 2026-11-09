@@ -33,8 +33,8 @@ public class KaffeineConfig internal constructor() {
      * Put a small Bloom filter in front of the frequency sketch, so keys that are seen only
      * once never take space in it. This is the "doorkeeper" idea from the TinyLFU paper.
      *
-     * Off by default. On our seven test traces it helped at some cache sizes and hurt at others,
-     * about -0.1 points on average, while costing about 10 extra bytes per entry.
+     * Off by default. On our seven test traces it helped at fewer than half of the cache sizes
+     * and lowered the hit ratio slightly on average, while costing about 10 extra bytes per entry.
      * See bench/RESULTS.md.
      */
     public var doorkeeper: Boolean = false
