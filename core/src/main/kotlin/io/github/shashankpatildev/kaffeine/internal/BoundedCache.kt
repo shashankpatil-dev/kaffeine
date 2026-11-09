@@ -136,16 +136,19 @@ internal class BoundedCache<K : Any, V : Any>(config: KaffeineConfig<K, V>) : Ca
         maintenanceLock.withLock { maintenance() }
     }
 
-    override fun stats(): CacheStats = stats?.snapshot() ?: CacheStats(0, 0, 0)
+    override fun stats(): CacheStats = stats?.snapshot() ?: CacheStats(0, 0, 0, 0, 0, 0)
 
     private fun startLoad(key: K, load: CompletableDeferred<V>, loader: suspend (K) -> V) {
         loadScope.launch {
+            val start = if (stats != null) ticker.read() else 0L
             try {
                 val value = loader(key)
+                stats?.loaded(succeeded = true, nanos = ticker.read() - start)
                 store(key, value, load)
                 inFlight.remove(key, load)
                 load.complete(value)
             } catch (e: Throwable) {
+                stats?.loaded(succeeded = false, nanos = ticker.read() - start)
                 // Failures are not cached: drop the load so the next caller tries again.
                 inFlight.remove(key, load)
                 load.completeExceptionally(e)
@@ -316,8 +319,23 @@ internal class BoundedCache<K : Any, V : Any>(config: KaffeineConfig<K, V>) : Ca
         val hits = LongAdder()
         val misses = LongAdder()
         val evictions = LongAdder()
+        private val loadSuccesses = LongAdder()
+        private val loadFailures = LongAdder()
+        private val loadTime = LongAdder()
 
-        fun snapshot() = CacheStats(hits.sum(), misses.sum(), evictions.sum())
+        fun loaded(succeeded: Boolean, nanos: Long) {
+            if (succeeded) loadSuccesses.increment() else loadFailures.increment()
+            loadTime.add(nanos)
+        }
+
+        fun snapshot() = CacheStats(
+            hitCount = hits.sum(),
+            missCount = misses.sum(),
+            evictionCount = evictions.sum(),
+            loadSuccessCount = loadSuccesses.sum(),
+            loadFailureCount = loadFailures.sum(),
+            totalLoadTimeNanos = loadTime.sum(),
+        )
     }
 
     private companion object {

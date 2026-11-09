@@ -177,6 +177,26 @@ class LoadingTest {
     }
 
     @Test
+    fun `counts successful and failed loads`() = runTest {
+        val ticker = FakeTicker()
+        val cache = cache {
+            recordStats = true
+            this.ticker = ticker
+        }
+
+        cache.get("a") { ticker.advance(1.minutes); "value" }
+        runCatching { cache.get("b") { error("database is down") } }
+        cache.get("a") { "not called, this one is a hit" }
+
+        val stats = cache.stats()
+        assertEquals(1, stats.loadSuccessCount)
+        assertEquals(1, stats.loadFailureCount)
+        assertEquals(1.minutes.inWholeNanoseconds, stats.totalLoadTimeNanos)
+        assertEquals(1, stats.hitCount)
+        assertEquals(2, stats.missCount)
+    }
+
+    @Test
     fun `rejects a load context that has a Job`() {
         assertFailsWith<IllegalArgumentException> {
             kaffeine<String, String> {

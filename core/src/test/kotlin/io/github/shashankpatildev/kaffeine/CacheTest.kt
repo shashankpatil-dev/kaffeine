@@ -102,7 +102,7 @@ class CacheTest {
         cache.put("a", 1)
         cache.getIfPresent("a")
 
-        assertEquals(CacheStats(0, 0, 0), cache.stats())
+        assertEquals(CacheStats(0, 0, 0, 0, 0, 0), cache.stats())
     }
 
     @Test
