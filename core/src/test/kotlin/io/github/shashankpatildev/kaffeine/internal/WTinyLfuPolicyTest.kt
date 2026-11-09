@@ -1,6 +1,7 @@
 package io.github.shashankpatildev.kaffeine.internal
 
 import io.github.shashankpatildev.kaffeine.internal.Node.Queue
+import kotlin.math.pow
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -102,6 +103,52 @@ class WTinyLfuPolicyTest {
         assertEquals(1, policy.size)
         assertEquals(listOf(first), evicted)
         assertEquals(Queue.WINDOW, second.queue)
+    }
+
+    @Test
+    fun `the window grows when recently used keys keep coming back`() {
+        val policy = policy(maximumSize = 100)
+        val nodes = HashMap<Int, Node<Int, Int>>()
+        val random = Random(5)
+
+        // A working set of 60 keys that slowly slides forward: each key is busy for a while,
+        // then never seen again. Plain LRU does well here, so a bigger window should win.
+        repeat(60_000) { t -> access(policy, nodes, key = t / 20 + random.nextInt(60)) }
+
+        assertTrue(policy.windowCapacity > 1, "the window stayed at ${policy.windowCapacity}")
+    }
+
+    @Test
+    fun `resizing the window keeps every entry and stays within maximum size`() {
+        val policy = policy(maximumSize = 100)
+        val nodes = HashMap<Int, Node<Int, Int>>()
+        val random = Random(9)
+        val windowSizesSeen = mutableSetOf<Long>()
+
+        repeat(100_000) { t ->
+            // Switch between frequency-friendly and recency-friendly traffic, so the window moves both ways.
+            val key = if ((t / 10_000) % 2 == 0) (random.nextDouble().pow(3) * 1_000).toInt() else t / 20 + random.nextInt(60)
+            access(policy, nodes, key)
+            windowSizesSeen += policy.windowCapacity
+
+            if (t % 1_000 == 0) {
+                val tracked = nodes.values.filter { it.queue != Queue.NONE }
+                assertEquals(policy.size, tracked.size, "the policy lost track of an entry")
+                assertTrue(policy.size <= 100)
+                assertTrue(tracked.count { it.queue == Queue.WINDOW } <= policy.windowCapacity)
+            }
+        }
+        assertTrue(windowSizesSeen.size > 2, "the window never moved: $windowSizesSeen")
+    }
+
+    /** One request, like the cache does it: a hit if the policy still holds the key, otherwise add it. */
+    private fun access(policy: WTinyLfuPolicy<Int, Int>, nodes: MutableMap<Int, Node<Int, Int>>, key: Int) {
+        val node = nodes[key]
+        if (node != null && node.queue != Queue.NONE) {
+            policy.onAccess(node)
+        } else {
+            policy.onAdd(Node(key, key).also { nodes[key] = it })
+        }
     }
 
     @Test
