@@ -250,9 +250,9 @@ flowchart TD
     Trig["Triggered by: every write,<br/>a full read stripe, or cleanUp()"] --> TL{"tryLock()"}
     TL -- "busy: someone else is draining" --> Skip(["return, the lock holder will see our task"])
     TL -- acquired --> DR["Drain read buffer<br/>policy.onAccess(node)"]
-    DR --> DW["Drain write buffer<br/>add / update / remove in policy and wheel"]
-    DW --> EX["timerWheel.advance(now)<br/>remove expired nodes"]
-    EX --> EV["Evict while size > maximumSize<br/>(W-TinyLFU decides)"]
+    DR --> EX["timerWheel.advance(now)<br/>remove expired nodes first"]
+    EX --> DW["Drain write buffer<br/>add / remove in policy and wheel"]
+    DW --> EV["Evict while size > maximumSize<br/>(W-TinyLFU decides, inside onAdd)"]
     EV --> UL["unlock()"]
     UL --> RC{"Write buffer still has tasks?"}
     RC -- yes --> TL
@@ -310,6 +310,7 @@ flowchart LR
 | One waiter is cancelled | Only that waiter stops. The load continues for the others |
 | **All** waiters are cancelled | The load still completes and the value is cached (useful work isn't thrown away) |
 | `invalidate(k)` during an in-flight load | The load finishes, but its value is **not stored** |
+| `put(k, v)` during an in-flight load | `v` wins. The load finishes, the waiters get its value, but it does not overwrite `v` |
 | Loader calls `get` for the **same key** (recursion) | Not supported. It would wait on itself (documented, like Caffeine) |
 | Invalid config (e.g. `maximumSize <= 0`, two expiry modes) | `IllegalArgumentException` at build time |
 

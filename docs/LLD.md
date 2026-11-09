@@ -592,8 +592,10 @@ blocking `lock()` and drains, instead of piling on more. Without this, the first
 8 threads livelocked: writers queued tasks faster than one thread could apply them, so the
 queue grew without limit and the draining thread never got to stop.
 
-In Step 3, updates that change an entry's expiry time need the timer wheel, so they will go
-back to being write tasks when expiry is turned on.
+With expiry on, an update that moves the entry's expiry time by more than 1 second is a
+write task, because the node has to move in the timer wheel. Smaller moves still go through
+the read buffer: if the wheel then fires a little early, `expireNode` checks the real expiry
+time again and puts the node back (race R16).
 
 ### 7.8 BoundedCache: the operations
 
@@ -664,9 +666,10 @@ private fun tryMaintenance() {
 override fun cleanUp() = lock.withLock { runMaintenance() }
 
 private fun runMaintenance() {                         // ONLY place the policy and wheel are touched
-    readBuffer.drainTo { n -> if (n.state == ALIVE) policy.onAccess(n) }   // + wheel.reschedule if expireAfterAccess
-    while (true) apply(writeBuffer.poll() ?: break)    // Add/Update/Remove (onAdd evicts if over max)
-    if (expiryEnabled) wheel.advance(now(), ::expireNode)
+    readBuffer.drainTo { n -> if (n.state == ALIVE) policy.onAccess(n) }   // + wheel.schedule if expireAfterAccess
+    if (expiryEnabled) wheel.advance(now(), ::expireNode) // expire BEFORE adding, so a live entry is never
+                                                          // evicted while an expired one still sits in the cache
+    while (true) apply(writeBuffer.poll() ?: break)    // Add/Remove tasks (onAdd evicts if over max)
 }
 
 private fun evictNode(n: Node<K, V>) {                 // called by the policy, under the lock
@@ -699,25 +702,31 @@ override suspend fun get(key: K, loader: suspend (K) -> V): V {
 }
 
 private fun startLoad(key: K, d: CompletableDeferred<V>, loader: suspend (K) -> V) {
-    cacheScope.launch {                                // cache-owned scope: one caller's cancel can't kill it
-        val start = ticker.read()
+    loadScope.launch {                                 // cache-owned scope: one caller's cancel can't kill it
         try {
             val value = loader(key)
-            var stored = false
-            inFlight.computeIfPresent(key) { _, cur ->     // store ONLY if still registered (not invalidated)
-                if (cur === d) { writeToMapAndEnqueue(key, value); stored = true; null } else cur
-            }
-            if (stored) tryMaintenance()
-            stats.loadSuccess(ticker.read() - start)
+            store(key, value, load = d)                // the same path as put, but only fills a gap
+            inFlight.remove(key, d)
             d.complete(value)
         } catch (e: Throwable) {                       // includes CancellationException
             inFlight.remove(key, d)                    // failures are not cached; the next get retries
-            stats.loadFailure(ticker.read() - start)
             d.completeExceptionally(e)
         }
     }
 }
+
+// Inside store()'s data.compute(key) lambda, for a finished load:
+private fun loadStillWanted(key: K, d: CompletableDeferred<V>, existing: Node<K, V>?, now: Long) =
+    inFlight[key] === d                                // not invalidated: invalidate() unregisters first
+        && (existing == null || existing.isExpired(now)) // and no one put a fresh value meanwhile
 ```
+
+Checking inside the map's lock is what makes this safe. `invalidate()` removes the in-flight
+entry **before** it removes the key, so either the load stores first and the invalidate then
+removes it, or the invalidate unregisters first and the load sees that. Either way the
+invalidate wins. A `put()` during the load also wins: the load sees a fresh value and leaves
+it alone. Lincheck found this one: without the "fresh value" check, a slow load overwrote a
+newer `put`.
 
 ```mermaid
 flowchart TD
@@ -731,9 +740,9 @@ flowchart TD
     RC -- no --> L["cacheScope.launch { loader(key) }"]
     L --> AW
     L --> OK{"loader result"}
-    OK -- success --> ST{"inFlight[key] still == d?"}
+    OK -- success --> ST{"still registered, and key still<br/>missing or expired?"}
     ST -- yes --> S1["store in map, remove d"] --> C1["d.complete(value)"]
-    ST -- "no: invalidated" --> C1
+    ST -- "no: invalidated or newer value" --> C1
     OK -- failure --> F1["remove d, completeExceptionally"]
     C1 --> AW
     F1 --> AW
@@ -847,13 +856,15 @@ open class GetPutBenchmark {                                 // Kotlin: JMH clas
 | R4 | Wheel bucket fires but the TTL was extended | `expireNode` re-checks → reschedule |
 | R5 | Expire vs concurrent `put` on the same key | `computeIfPresent(cur === n && expired)`, atomic per key |
 | R6 | Evict vs invalidate on the same node | `data.remove(key, n)` fails harmlessly; the Remove task is a no-op |
-| R7 | Load completes **after** `invalidate` | `computeIfPresent(cur === d)` fails → not stored; waiters still get the value |
+| R7 | Load completes **after** `invalidate` | `loadStillWanted` sees it is no longer registered → not stored; waiters still get the value |
 | R8 | Miss check races with a load that just completed | re-check `data` after creating the Deferred |
 | R9 | Task added while the drainer is unlocking | the `while (writeBuffer.isNotEmpty())` re-check loop |
 | R10 | Loader calls a blocking API | the user sets `loadContext = Dispatchers.IO` (documented) |
 | R11 | `loadContext` contains a `Job` | rejected by validation |
 | R12 | `nanoTime` negative / overflow | relative time from `origin` + saturating add |
 | R13 | Loader recursively `get`s the same key | waits on itself forever. Documented as unsupported |
+| R15 | `put` while a load for the same key runs | the load only fills a gap: it sees a fresh value and does not overwrite it. Caught by Lincheck |
+| R16 | Value updated many times a second with expiry on | expiry moves under 1 s skip the write task (read buffer instead); if the wheel fires early, `expireNode` checks again |
 | R14 | User code (`expireAfter`, `hashCode`) is slow | `expireAfter` runs outside the map lock; `hashCode` is computed once per node |
 
 ---

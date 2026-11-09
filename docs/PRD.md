@@ -55,7 +55,7 @@ Kotlin backend services (Ktor, Spring WebFlux, coroutines) need an in-memory cac
 | FR-3 | `getIfPresent(key): V?`: returns the value, or `null` if absent or expired |
 | FR-4 | `put(key, value)`: inserts or replaces |
 | FR-5 | `suspend get(key, loader): V`: returns the cached value, or loads it with **coalescing** (one in-flight load per key) |
-| FR-6 | `invalidate(key)`, `invalidateAll()`: remove entries. Invalidating during an in-flight load means the loaded value is **not** stored |
+| FR-6 | `invalidate(key)`, `invalidateAll()`: remove entries. Invalidating, or putting a new value, during an in-flight load means the loaded value is **not** stored: newer data wins |
 | FR-7 | Expiry modes (at most one): `expireAfterWrite`, `expireAfterAccess`, or `expireAfter { key, value -> Duration }` (per entry) |
 | FR-8 | An expired entry is **never returned**, even before background cleanup removes it |
 | FR-9 | `stats()`: hits, misses, hit rate, load successes and failures, total load time, evictions (when `recordStats = true`) |
