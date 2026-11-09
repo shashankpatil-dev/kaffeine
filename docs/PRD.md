@@ -121,13 +121,13 @@ val http = kaffeine<String, Response> {
 
 ## 9. Success metrics (definition of done)
 
-- [ ] All functional requirements implemented and tested
-- [ ] Hit-ratio results for **≥ 4 public traces × ≥ 3 cache sizes** vs LRU, Caffeine and Bélády (optimal), summed up in `bench/RESULTS.md`
-- [ ] JMH results for **3 workloads × 1/4/8 threads** vs Caffeine, summed up in `bench/RESULTS.md`
-- [ ] Coalescing proven: 1,000 concurrent `get` calls for the same key → loader called **exactly once** (test)
-- [ ] CI green: unit, stress and Lincheck tests, coverage ≥ 85%
-- [ ] Released as `v0.1.0` on JitPack. A sample project can depend on it
-- [ ] README with quickstart, design summary and honest benchmark charts
+- [x] All functional requirements implemented and tested
+- [x] Hit-ratio results for **≥ 4 public traces × ≥ 3 cache sizes** vs LRU, Caffeine and Bélády (optimal), summed up in `bench/RESULTS.md`
+- [x] JMH results for **3 workloads × 1/4/8 threads** vs Caffeine, summed up in `bench/RESULTS.md`
+- [x] Coalescing proven: 1,000 concurrent `get` calls for the same key → loader called **exactly once** (test)
+- [x] CI green: unit, stress and Lincheck tests, coverage ≥ 85%
+- [x] Released as `v0.1.0` on JitPack. A sample project can depend on it
+- [x] README with quickstart, design summary and honest benchmark charts
 
 ## 10. Risks and mitigations
 

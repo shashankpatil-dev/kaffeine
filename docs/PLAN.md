@@ -98,7 +98,7 @@ flowchart LR
 - [x] Kover: core coverage ≥ 85%, enforced in CI (97% now)
 
 ### Exit criteria
-- [ ] CI green with coverage ≥ 85%
+- [x] CI green with coverage ≥ 85%
 - [x] Every FR in the PRD is implemented and tested
 
 ### After Step 3 you can answer
@@ -115,12 +115,12 @@ flowchart LR
 **Goal:** publish honest results, a great README, and `v0.1.0` on JitPack.
 
 ### Tasks
-- [ ] Full simulator run: all traces × sizes → final tables + charts
-- [ ] Full JMH run: 3 workloads × 1/4/8 threads × {LinkedHashMap+lock, Kaffeine, Caffeine, CHM} → final tables + charts
-- [ ] README: what and why, quickstart, design summary (link docs), results with honest analysis (where we lose and why), how to reproduce
-- [ ] KDoc on every public API
-- [ ] `maven-publish` on `core` + `jitpack.yml` (JDK 17); tag `v0.1.0`; check it works by depending on it from a scratch project
-- [ ] Final resume bullet with **real numbers**
+- [x] Full simulator run: all traces × sizes → final tables + charts
+- [x] Full JMH run: 3 workloads × 1/4/8 threads × {LinkedHashMap+lock, Kaffeine, Caffeine, CHM} → final tables + charts (all in one session)
+- [x] README: what and why, quickstart, design summary (link docs), results with honest analysis (where we lose and why), how to reproduce
+- [x] KDoc on every public API
+- [x] `maven-publish` on `core` + `jitpack.yml` (JDK 17); tag `v0.1.0`; check it works by depending on it from a scratch project (installed from JitPack, 100 callers → 1 load)
+- [x] Final resume bullet with **real numbers**
 
 ### Stretch (only if everything above is done)
 - [ ] Profile the read path against Caffeine (JFR / async-profiler): background maintenance, padding, cheaper stripe choice
@@ -130,8 +130,8 @@ flowchart LR
 - [ ] Measure memory per entry (JOL)
 
 ### Exit criteria
-- [ ] All PRD success metrics checked ✓
-- [ ] Anyone can reproduce every number with the commands in the README
+- [x] All PRD success metrics checked ✓
+- [x] Anyone can reproduce every number with the commands in the README
 
 ### After Step 4 you can answer
 - Show me your results. Where are you worse than Caffeine, and why?
