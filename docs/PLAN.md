@@ -20,24 +20,24 @@ flowchart LR
 **Learn first:** `learn/02`, `learn/03`, `learn/04`, `learn/05`
 
 ### Tasks
-- [ ] Gradle wrapper, `settings.gradle.kts`, `libs.versions.toml` (pin latest stable versions), `core` + `bench` modules
-- [ ] `.github/workflows/ci.yml` running `./gradlew build`
-- [ ] Public API: `Cache`, `kaffeine {}` + validation, `CacheStats`, `Ticker`
-- [ ] `Node`, `spread()`
-- [ ] `AccessOrderDeque` + tests
-- [ ] `FrequencySketch` (4-bit counters, aging) + tests
-- [ ] `BloomFilter` (doorkeeper) + tests
-- [ ] `WTinyLfuPolicy` + tests (scan resistance, promotion, demotion, `maximumSize = 1`)
-- [ ] `BoundedCache` **v1**: `ConcurrentHashMap` + **one `ReentrantLock` around every policy update** (no buffers yet): `getIfPresent`, `put`, `invalidate`, `invalidateAll`, `cleanUp`, `stats`
-- [ ] `CacheTest` (API semantics, size bound, validation)
-- [ ] Simulator: `Traces.kt` (LIRS, ARC), `SimPolicies.kt` (LRU, Kaffeine, Caffeine), `Belady.kt`, `Report.kt`, `Simulator.kt` CLI
-- [ ] `scripts/download-traces.sh` + `SimulatorTest` with a tiny committed trace
-- [ ] **Experiment:** doorkeeper on vs off on all traces → choose the default and record why in `bench/results/hit-ratio/README.md`
+- [x] Gradle wrapper, `settings.gradle.kts`, `libs.versions.toml` (pin latest stable versions), `core` + `bench` modules
+- [x] `.github/workflows/ci.yml` running `./gradlew build`
+- [x] Public API: `Cache`, `kaffeine {}` + validation, `CacheStats` (`Ticker` moved to Step 3, where expiry first needs it)
+- [x] `Node`, `spread()`
+- [x] `AccessOrderDeque` + tests
+- [x] `FrequencySketch` (4-bit counters, aging) + tests
+- [x] `BloomFilter` (doorkeeper) + tests
+- [x] `WTinyLfuPolicy` + tests (scan resistance, promotion, demotion, `maximumSize = 1`)
+- [x] `BoundedCache` **v1**: `ConcurrentHashMap` + **one `ReentrantLock` around every policy update** (no buffers yet): `getIfPresent`, `put`, `invalidate`, `invalidateAll`, `stats` (`cleanUp` moved to Step 2, it has nothing to do until there are buffers)
+- [x] `CacheTest` (API semantics, size bound, validation)
+- [x] Simulator: `Traces.kt` (LIRS, ARC), `SimPolicies.kt` (LRU, Kaffeine, Caffeine), `Belady.kt`, `Report.kt`, `Simulator.kt` CLI
+- [x] `scripts/download-traces.sh`, `scripts/simulate-all.sh` + `SimulatorTest` (readers, LRU and Bélády worked out by hand, Bélády as the upper bound)
+- [x] **Experiment:** doorkeeper on vs off on all traces → choose the default and record why in `bench/RESULTS.md` (result: off)
 
 ### Exit criteria
 - [ ] CI green
-- [ ] Hit-ratio tables for ≥ 4 traces × ≥ 3 sizes committed
-- [ ] Kaffeine is within ~1 pp of Caffeine on average, **or** the gap is explained (likely: no adaptive window)
+- [x] Hit-ratio tables for ≥ 4 traces × ≥ 3 sizes committed
+- [x] Kaffeine is within ~1 pp of Caffeine on average, **or** the gap is explained (likely: no adaptive window)
 
 ### After Step 1 you can answer
 - Why does LRU fail on scans, and how does W-TinyLFU fix it?
@@ -55,14 +55,15 @@ flowchart LR
 
 ### Tasks
 - [ ] JMH harness: `Zipf.kt`, `BenchCaches.kt` (Kaffeine, Caffeine, LinkedHashMap+lock, CHM), `GetPutBenchmark`
-- [ ] **Run JMH on v1** → `bench/results/jmh/v1.json` (the baseline)
+- [ ] **Run JMH on v1** → numbers in `bench/RESULTS.md` (the baseline)
 - [ ] `ReadBuffer` (striped, lossy) + tests
 - [ ] Write buffer (`ConcurrentLinkedQueue` + `Add`/`Update`/`Remove` tasks)
 - [ ] Node lifecycle (`ALIVE`/`RETIRED`/`DEAD`) and the task rules (LLD §7.7)
 - [ ] `tryMaintenance()` with the re-check loop (no lost wakeup)
+- [ ] `cleanUp()` (force maintenance now)
 - [ ] `StressTest` (8 threads, random ops, invariants incl. policy size == map size)
 - [ ] `LincheckTest` (model checking + stress)
-- [ ] **Run JMH on v2** → `bench/results/jmh/v2.json`, compare with v1 and Caffeine
+- [ ] **Run JMH on v2** → compare with v1 and Caffeine in `bench/RESULTS.md`
 - [ ] If the gap is big: profile (JFR / async-profiler), try padding against false sharing, record what helped
 - [ ] Re-run the simulator: hit ratio must not change by more than ~0.5 pp
 
@@ -85,7 +86,7 @@ flowchart LR
 **Learn first:** `learn/01`, `learn/06`
 
 ### Tasks
-- [ ] `FakeTicker` (test), relative time (`origin`), saturating `expiresAt`
+- [ ] `Ticker` + `FakeTicker` (test), relative time (`origin`), saturating `expiresAt`
 - [ ] `TimerWheel` + tests (tick, cascade, overflow, deschedule, big time jumps)
 - [ ] Expiry modes: `expireAfterWrite`, `expireAfterAccess`, `expireAfter {}`. Read-time check; `expireNode` with re-check (R4, R5)
 - [ ] `ExpiryTest`
