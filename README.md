@@ -1,17 +1,35 @@
 # Kaffeine
 
-A Caffeine-style in-memory cache for Kotlin.
+[![CI](https://github.com/shashankpatil-dev/kaffeine/actions/workflows/ci.yml/badge.svg)](https://github.com/shashankpatil-dev/kaffeine/actions/workflows/ci.yml)
+[![JitPack](https://jitpack.io/v/shashankpatil-dev/kaffeine.svg)](https://jitpack.io/#shashankpatil-dev/kaffeine)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-- **W-TinyLFU eviction**: a small LRU window plus a segmented LRU main region, guarded by a
-  Count-Min Sketch and a Bloom filter doorkeeper
+A coroutine-native in-memory cache for Kotlin, built the way Caffeine is built inside.
+
+- **W-TinyLFU eviction**: a small LRU window plus a segmented LRU main region, with a
+  Count-Min Sketch deciding which entries are worth keeping
 - **Timing-wheel expiry**: after write, after access, or a lifetime per entry
 - **`suspend` loading with request coalescing**: many callers for one missing key share a
   single load, with clear rules for failures, cancellation and invalidation
 - **Lock-free reads**: reads leave a note in a striped buffer, and one thread at a time
-  applies the notes to the policy
+  applies the notes to the eviction policy
 - **Measured against Caffeine** on public cache traces and with JMH
 
-> Work in progress. See [docs/PLAN.md](docs/PLAN.md) for where things stand.
+## Install
+
+Kaffeine is published through [JitPack](https://jitpack.io/#shashankpatil-dev/kaffeine)
+and needs JDK 17 or newer.
+
+```kotlin
+repositories {
+    mavenCentral()
+    maven("https://jitpack.io")
+}
+
+dependencies {
+    implementation("com.github.shashankpatil-dev:kaffeine:v0.1.0")
+}
+```
 
 ## Usage
 
@@ -41,38 +59,92 @@ val responses = kaffeine<String, Response> {
 }
 ```
 
-## Build
+What `get(key, loader)` promises:
 
-Needs JDK 17.
+- However many callers ask for the same missing key at once, the loader runs once.
+- If the loader throws, every waiting caller gets the exception and nothing is cached.
+- If one caller is cancelled, the load keeps going for the others and is still cached.
+- If the key is invalidated or given a new value while it loads, the newer state wins.
+
+## How it works
+
+The data lives in a `ConcurrentHashMap`, so reads never wait. The eviction policy and the
+timer wheel are plain single-threaded structures. Reads drop a note in a lossy, striped ring
+buffer, and adding or removing a key queues a task. One thread at a time takes a lock with
+`tryLock`, applies the notes and tasks, expires what is due, and evicts what the policy picks.
+
+When the cache is full, the oldest entry of a small LRU window competes with the oldest entry
+of the main region. A Count-Min Sketch with 4-bit counters estimates how often each was used,
+and the more popular one stays. The counters are halved now and then, so old popularity fades.
+
+Expiry uses a five-level timing wheel, from about one second per bucket up to days, so finding
+expired entries costs O(1) per entry. A read also checks the entry's time, so an expired value
+is never returned, even before the wheel removes it.
+
+`get(key, loader)` keeps one `CompletableDeferred` per loading key. Loads run in the cache's
+own `SupervisorJob` scope, so a caller being cancelled never cancels a load others are waiting
+for. The full design, with diagrams and the list of races it handles, is in the docs below.
+
+## Results
+
+### Hit ratio
+
+![Hit ratio of Kaffeine, Caffeine, LRU and the optimal policy on seven traces](docs/images/hit-ratio.svg)
+
+Percent of requests served from the cache, averaged over the cache sizes tested per trace:
+
+| Trace | Kaffeine | Caffeine | LRU | Optimal |
+|---|---:|---:|---:|---:|
+| DS1 (database) | 39.5 | 38.9 | 19.3 | 43.8 |
+| S3 (web search) | 37.0 | 35.6 | 18.9 | 51.6 |
+| OLTP (database) | 50.6 | 53.8 | 50.9 | 66.1 |
+| loop | 58.5 | 58.9 | 0.0 | 61.7 |
+| gli | 39.2 | 35.6 | 17.6 | 40.7 |
+| multi2 | 63.0 | 63.1 | 51.0 | 67.2 |
+| sprite | 61.5 | 62.4 | 59.8 | 76.6 |
+
+Kaffeine beats LRU by 12 to 58 points on five of the seven traces and is level with Caffeine
+on average. It loses on OLTP, a trace that rewards recently used keys: Caffeine resizes its
+window while running, and Kaffeine's window is fixed at 1% of the cache.
+
+### Throughput
+
+![Reads per second at 1, 4 and 8 threads for four caches](docs/images/throughput.svg)
+
+Millions of operations per second at 8 threads, all caches in one JMH run:
+
+| Workload | Kaffeine | Caffeine | ConcurrentHashMap (no eviction) | LinkedHashMap + lock |
+|---|---:|---:|---:|---:|
+| 100% reads | 128.4 | 244.5 | 430.3 | 8.0 |
+| 75% reads | 55.8 | 112.4 | 141.8 | 8.6 |
+| 100% writes | 38.9 | 66.5 | 56.4 | 8.0 |
+
+Kaffeine scales with threads like Caffeine does, at about half its speed. The first version,
+with one lock around the policy, got slower as threads were added, like the `LinkedHashMap`
+does here; lock-free reads made it more than 10 times faster at 8 threads.
+
+All numbers, how they were measured, and what changed along the way:
+[bench/RESULTS.md](bench/RESULTS.md).
+
+## Build and test
 
 ```bash
-./gradlew build             # compile everything and run all tests
+./gradlew build             # compile, run every test, check coverage (85% minimum)
 ```
 
-## Hit ratio simulator
+The tests include an 8-thread stress test and [Lincheck](https://github.com/JetBrains/lincheck)
+checks that run operations from several threads in many interleavings and verify the results.
 
-The simulator replays real recorded traces through LRU, Kaffeine, Caffeine and Belady's
-optimal policy, and reports the hit ratio of each.
+## Benchmarks
 
 ```bash
 scripts/download-traces.sh                                    # ARC and LIRS traces into traces/
-scripts/simulate-all.sh                                       # every trace, every policy
+scripts/simulate-all.sh                                       # hit ratio: every trace, every policy
 ./gradlew :bench:run --args="traces/OLTP.lis 1000,2000,5000"  # or one trace at chosen sizes
-```
 
-Results and what they mean: [bench/RESULTS.md](bench/RESULTS.md). In short, Kaffeine
-beats LRU by 12 to 58 points on five of the seven traces, roughly ties it on the other two, and
-is level with Caffeine on average.
-
-## Throughput benchmark
-
-```bash
-scripts/benchmark.sh                                          # JMH, 1, 4 and 8 threads, about 12 minutes
+scripts/benchmark.sh                                          # JMH at 1, 4 and 8 threads, about 12 minutes
 THREADS=8 scripts/benchmark.sh -p cache=kaffeine,caffeine     # a quicker, focused run
 ```
-
-Lock-free reads made Kaffeine more than 10 times faster than the first single-lock version
-at 8 threads. It still trails Caffeine: about 61% of its read throughput in the same run.
 
 ## Design docs
 
@@ -80,3 +152,8 @@ at 8 threads. It still trails Caffeine: about 61% of its read throughput in the 
 - [HLD](docs/HLD.md): architecture and main flows
 - [LLD](docs/LLD.md): classes, algorithms, races and tests
 - [Plan](docs/PLAN.md): the four build steps
+
+## License
+
+Apache 2.0, see [LICENSE](LICENSE). The cache traces used for the hit ratio results belong to
+their authors and are cited in [bench/RESULTS.md](bench/RESULTS.md).
