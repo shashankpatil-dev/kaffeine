@@ -5,6 +5,7 @@ coroutines = "1.11.0"
 jmh-core = "1.37"
 jmh-plugin = "0.7.4"
 lincheck = "3.7"
+kover = "0.9.11"
 
 [libraries]
 caffeine = { module = "com.github.ben-manes.caffeine:caffeine", version.ref = "caffeine" }
@@ -15,3 +16,4 @@ lincheck = { module = "org.jetbrains.lincheck:lincheck", version.ref = "lincheck
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 jmh = { id = "me.champeau.jmh", version.ref = "jmh-plugin" }
+kover = { id = "org.jetbrains.kotlinx.kover", version.ref = "kover" }

@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.kover)
 }
 
 kotlin {
@@ -15,6 +16,16 @@ dependencies {
     testImplementation(kotlin("test"))
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.lincheck)
+}
+
+kover {
+    reports {
+        verify {
+            rule {
+                minBound(85) // percent of lines covered by tests; the build fails below this
+            }
+        }
+    }
 }
 
 tasks.test {
