@@ -146,6 +146,18 @@ class LoadingTest {
     }
 
     @Test
+    fun `a put while loading wins over the slower load`() = runTest {
+        val cache = cache()
+        val waiter = async { cache.get("a") { delay(100); "old" } }
+        runCurrent()
+
+        cache.put("a", "new")
+
+        assertEquals("old", waiter.await()) // the caller still gets what it waited for
+        assertEquals("new", cache.getIfPresent("a"))
+    }
+
+    @Test
     fun `an expired value is loaded again`() = runTest {
         val ticker = FakeTicker()
         val cache = cache {

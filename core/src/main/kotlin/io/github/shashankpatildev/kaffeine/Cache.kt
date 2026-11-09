@@ -25,8 +25,8 @@ public interface Cache<K : Any, V : Any> {
      *   so the next call tries again.
      * - If a caller is cancelled while waiting, only that caller stops. The load keeps going
      *   for the others, and its value is still cached.
-     * - If the key is invalidated while it loads, the callers still get the value, but it is
-     *   not cached.
+     * - If the key is invalidated, or given a new value with [put], while it loads, the callers
+     *   still get the loaded value, but it is not cached. Newer data always wins.
      * - The loader must not call [get] for the same key, or it would wait for itself forever.
      */
     public suspend fun get(key: K, loader: suspend (K) -> V): V

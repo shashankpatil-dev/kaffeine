@@ -159,19 +159,18 @@ internal class BoundedCache<K : Any, V : Any>(config: KaffeineConfig<K, V>) : Ca
     /**
      * Writes the value into the map and tells the policy about it.
      *
-     * A finished load passes itself as [load], and its value is only stored if that load is
-     * still the registered one for the key. invalidate() unregisters the load before it removes
-     * the key, and we check inside the map's lock, so an invalidate during a load always wins.
+     * A finished load passes itself as [load]. See [loadStillWanted] for when its value is kept.
      */
     private fun store(key: K, value: V, load: CompletableDeferred<V>?) {
         // Work out the expiry time first, so a slow expireAfter function never runs inside the map's lock.
-        val expiresAt = if (wheel != null) expiresAt(now(), key, value) else NEVER
+        val now = if (wheel != null) now() else 0L
+        val expiresAt = if (wheel != null) expiresAt(now, key, value) else NEVER
         var added: Node<K, V>? = null
         var updated: Node<K, V>? = null
         var oldExpiresAt = NEVER
         data.compute(key) { _, existing ->
             when {
-                load != null && inFlight[key] !== load -> existing // invalidated while loading, leave the map alone
+                load != null && !loadStillWanted(key, load, existing, now) -> existing // leave the map alone
                 existing == null -> Node(key, value, expiresAt).also { added = it }
                 else -> existing.also {
                     oldExpiresAt = it.expiresAt
@@ -206,6 +205,15 @@ internal class BoundedCache<K : Any, V : Any>(config: KaffeineConfig<K, V>) : Ca
             }
         }
     }
+
+    /**
+     * A finished load only fills a gap. Its value is dropped if the key was invalidated while
+     * it ran (the load is no longer registered), or if someone put a fresh value meanwhile, so
+     * a slow load never overwrites newer data. invalidate() unregisters the load before it
+     * removes the key, and this runs inside the map's lock, so the check cannot race with it.
+     */
+    private fun loadStillWanted(key: K, load: CompletableDeferred<V>, existing: Node<K, V>?, now: Long): Boolean =
+        inFlight[key] === load && (existing == null || (wheel != null && existing.isExpired(now)))
 
     /** The cached value if it is there and not expired, without counting a hit or a miss. */
     private fun freshValue(key: K): V? {
