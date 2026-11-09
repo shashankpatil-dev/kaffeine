@@ -4,14 +4,17 @@ package io.github.shashankpatildev.kaffeine.internal
  * One entry in the cache.
  *
  * The [prev] and [next] links let a node sit inside an [AccessOrderDeque] without any
- * wrapper object around it, and [queue] tells us which deque that is.
+ * wrapper object around it, and [queue] tells us which deque that is. The wheel links do
+ * the same for the [TimerWheel] bucket the node waits in.
  *
- * [value] and [state] may be touched by any thread. Everything else belongs to the
- * eviction policy and is touched only while holding the maintenance lock.
+ * [value], [expiresAt] and [state] may be touched by any thread. Everything else belongs to
+ * the policy and the wheel, and is touched only while holding the maintenance lock.
  */
 internal class Node<K : Any, V : Any>(
     val key: K,
     @Volatile var value: V,
+    /** When the entry expires, in nanoseconds on the cache's own clock. [NEVER] if it does not. */
+    @Volatile var expiresAt: Long = NEVER,
 ) {
     /** Mixed hash of the key. Worked out once, because the sketch needs it on every access. */
     val hash: Int = spread(key.hashCode())
@@ -22,6 +25,13 @@ internal class Node<K : Any, V : Any>(
     var queue: Queue = Queue.NONE
     var prev: Node<K, V>? = null
     var next: Node<K, V>? = null
+
+    var prevInWheel: Node<K, V>? = null
+    var nextInWheel: Node<K, V>? = null
+    var wheelLevel: Int = -1 // -1 means the node is not in the wheel
+    var wheelIndex: Int = 0
+
+    fun isExpired(now: Long): Boolean = now >= expiresAt
 
     /**
      * Where the node is in its life. Policy updates run a little later than the map changes,
@@ -42,4 +52,8 @@ internal class Node<K : Any, V : Any>(
     enum class Queue { NONE, WINDOW, PROBATION, PROTECTED }
 
     override fun toString(): String = "Node($key, $state, $queue)"
+
+    companion object {
+        const val NEVER = Long.MAX_VALUE
+    }
 }
