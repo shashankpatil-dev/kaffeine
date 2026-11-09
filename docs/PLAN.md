@@ -68,7 +68,7 @@ flowchart LR
 - [x] Re-run the simulator: hit ratio must not change by more than ~0.5 pp (+0.1 on average, 25 of 29 points within 0.5; the loop trace swings more, see `bench/RESULTS.md`)
 
 ### Exit criteria
-- [ ] CI green, including Lincheck and the stress tests
+- [x] CI green, including Lincheck and the stress tests
 - [x] Documented: "v1 6.5M ops/s → v2 77.2M ops/s (8 threads, read_100)" and Kaffeine vs Caffeine
 
 ### After Step 2 you can answer
@@ -86,20 +86,20 @@ flowchart LR
 **Learn first:** `learn/01`, `learn/06`
 
 ### Tasks
-- [ ] `Ticker` + `FakeTicker` (test), relative time (`origin`), saturating `expiresAt`
-- [ ] `TimerWheel` + tests (tick, cascade, overflow, deschedule, big time jumps)
-- [ ] Expiry modes: `expireAfterWrite`, `expireAfterAccess`, `expireAfter {}`. Read-time check; `expireNode` with re-check (R4, R5)
-- [ ] `ExpiryTest`
-- [ ] `suspend get(key, loader)`: `inFlight` + `CompletableDeferred` + `cacheScope` (LLD §7.8)
-- [ ] `LoadingTest`: 1,000 callers → 1 load; failure + retry; cancel one / cancel all; invalidate during load; `loadContext`
-- [ ] Add `get(key, loader)` to `LincheckTest`
-- [ ] Complete stats (load success/failure/time)
-- [ ] JMH: read benchmark with expiry on → record the cost of expiry
-- [ ] Kover: core coverage ≥ 85%, enforced in CI
+- [x] `Ticker` + `FakeTicker` (test), relative time (`origin`), saturating `expiresAt`
+- [x] `TimerWheel` + tests (tick, cascade, overflow, deschedule, big time jumps)
+- [x] Expiry modes: `expireAfterWrite`, `expireAfterAccess`, `expireAfter {}`. Read-time check; `expireNode` with re-check (R4, R5)
+- [x] `ExpiryTest`
+- [x] `suspend get(key, loader)`: `inFlight` + `CompletableDeferred` + `cacheScope` (LLD §7.8). A finished load only fills a gap, so a concurrent `put` wins
+- [x] `LoadingTest`: 1,000 callers → 1 load (and 16 real threads → 1 load); failure + retry; cancel one / cancel all; invalidate or put during load; `loadContext`
+- [x] Add `get(key, loader)` to `LincheckTest`
+- [x] Complete stats (load success/failure/time)
+- [x] JMH: read benchmark with expiry on → record the cost of expiry
+- [x] Kover: core coverage ≥ 85%, enforced in CI (97% now)
 
 ### Exit criteria
 - [ ] CI green with coverage ≥ 85%
-- [ ] Every FR in the PRD is implemented and tested
+- [x] Every FR in the PRD is implemented and tested
 
 ### After Step 3 you can answer
 - How does a hierarchical timing wheel give O(1) expiry? What is cascading?
