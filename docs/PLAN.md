@@ -35,7 +35,7 @@ flowchart LR
 - [x] **Experiment:** doorkeeper on vs off on all traces → choose the default and record why in `bench/RESULTS.md` (result: off)
 
 ### Exit criteria
-- [ ] CI green
+- [x] CI green
 - [x] Hit-ratio tables for ≥ 4 traces × ≥ 3 sizes committed
 - [x] Kaffeine is within ~1 pp of Caffeine on average, **or** the gap is explained (likely: no adaptive window)
 
@@ -54,22 +54,22 @@ flowchart LR
 **Learn first:** `learn/07`, `learn/08`
 
 ### Tasks
-- [ ] JMH harness: `Zipf.kt`, `BenchCaches.kt` (Kaffeine, Caffeine, LinkedHashMap+lock, CHM), `GetPutBenchmark`
-- [ ] **Run JMH on v1** → numbers in `bench/RESULTS.md` (the baseline)
-- [ ] `ReadBuffer` (striped, lossy) + tests
-- [ ] Write buffer (`ConcurrentLinkedQueue` + `Add`/`Update`/`Remove` tasks)
-- [ ] Node lifecycle (`ALIVE`/`RETIRED`/`DEAD`) and the task rules (LLD §7.7)
-- [ ] `tryMaintenance()` with the re-check loop (no lost wakeup)
-- [ ] `cleanUp()` (force maintenance now)
-- [ ] `StressTest` (8 threads, random ops, invariants incl. policy size == map size)
-- [ ] `LincheckTest` (model checking + stress)
-- [ ] **Run JMH on v2** → compare with v1 and Caffeine in `bench/RESULTS.md`
-- [ ] If the gap is big: profile (JFR / async-profiler), try padding against false sharing, record what helped
-- [ ] Re-run the simulator: hit ratio must not change by more than ~0.5 pp
+- [x] JMH harness: `Zipf.kt`, `BenchCaches.kt` (Kaffeine, Caffeine, LinkedHashMap+lock, CHM), `GetPutBenchmark`
+- [x] **Run JMH on v1** → numbers in `bench/RESULTS.md` (the baseline)
+- [x] `ReadBuffer` (striped, lossy, grows on contention) + tests
+- [x] Write buffer (`ConcurrentLinkedQueue` of small tasks, with back-pressure). Value updates go through the read buffer
+- [x] Node lifecycle (`ALIVE`/`RETIRED`/`DEAD`) and the task rules (LLD §7.7)
+- [x] `tryMaintenance()` with the re-check loop (no lost wakeup)
+- [x] `cleanUp()` (force maintenance now)
+- [x] `StressTest` (8 threads, random ops, invariants incl. policy size == map size)
+- [x] `LincheckTest` (model checking + stress, plus a check that the policy matches the map)
+- [x] **Run JMH on v2** → compare with v1 and Caffeine in `bench/RESULTS.md`
+- [ ] If the gap is big: profile (JFR / async-profiler), try padding against false sharing, record what helped (moved to Step 4)
+- [x] Re-run the simulator: hit ratio must not change by more than ~0.5 pp (+0.1 on average, 25 of 29 points within 0.5; the loop trace swings more, see `bench/RESULTS.md`)
 
 ### Exit criteria
 - [ ] CI green, including Lincheck and the stress tests
-- [ ] Documented: "v1 X ops/s → v2 Y ops/s (8 threads, read-100)" and Kaffeine vs Caffeine
+- [x] Documented: "v1 6.5M ops/s → v2 77.2M ops/s (8 threads, read_100)" and Kaffeine vs Caffeine
 
 ### After Step 2 you can answer
 - Why is the read buffer allowed to drop events but the write buffer isn't?
@@ -123,6 +123,7 @@ flowchart LR
 - [ ] Final resume bullet with **real numbers**
 
 ### Stretch (only if everything above is done)
+- [ ] Profile the read path against Caffeine (JFR / async-profiler): background maintenance, padding, cheaper stripe choice
 - [ ] Adaptive window (hill climbing), then re-run the simulator and compare
 - [ ] Bounded write buffer with back-pressure
 - [ ] Removal listener
