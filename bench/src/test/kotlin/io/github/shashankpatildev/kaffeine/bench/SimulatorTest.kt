@@ -66,6 +66,18 @@ class SimulatorTest {
         }
     }
 
+    @Test
+    fun `report formats hit ratios as a table`() {
+        val report = Report("tiny", requests = 4, policies = listOf("lru", "belady"))
+        report.add(cacheSize = 2, policy = "lru", hits = 1)
+        report.add(cacheSize = 2, policy = "belady", hits = 2)
+
+        val markdown = report.toMarkdown()
+
+        assertTrue("| 2 | 25.00 | 50.00 |" in markdown, markdown)
+        assertEquals("cache_size,lru,belady\n2,25.0000,50.0000\n", report.toCsv())
+    }
+
     /** Some keys are much more popular than others, like real traffic. */
     private fun skewedTrace(requests: Int, keys: Int): LongArray {
         val random = Random(3)
