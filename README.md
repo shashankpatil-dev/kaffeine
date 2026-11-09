@@ -7,7 +7,8 @@
 A coroutine-native in-memory cache for Kotlin, built the way Caffeine is built inside.
 
 - **W-TinyLFU eviction**: a small LRU window plus a segmented LRU main region, with a
-  Count-Min Sketch deciding which entries are worth keeping
+  Count-Min Sketch deciding which entries are worth keeping, and a hill climber that resizes
+  the window to fit the traffic
 - **Timing-wheel expiry**: after write, after access, or a lifetime per entry
 - **`suspend` loading with request coalescing**: many callers for one missing key share a
   single load, with clear rules for failures, cancellation and invalidation
@@ -81,6 +82,9 @@ Expiry uses a five-level timing wheel, from about one second per bucket up to da
 expired entries costs O(1) per entry. A read also checks the entry's time, so an expired value
 is never returned, even before the wheel removes it.
 
+This upkeep runs on the calling thread by default. The `executor` setting can move it to a
+thread pool, the way Caffeine does it, but for this cache that measured slower for reads.
+
 `get(key, loader)` keeps one `CompletableDeferred` per loading key. Loads run in the cache's
 own `SupervisorJob` scope, so a caller being cancelled never cancels a load others are waiting
 for. The full design, with diagrams and the list of races it handles, is in the docs below.
@@ -95,17 +99,18 @@ Percent of requests served from the cache, averaged over the cache sizes tested 
 
 | Trace | Kaffeine | Caffeine | LRU | Optimal |
 |---|---:|---:|---:|---:|
-| DS1 (database) | 39.5 | 38.9 | 19.3 | 43.8 |
-| S3 (web search) | 37.0 | 35.6 | 18.9 | 51.6 |
-| OLTP (database) | 50.6 | 53.8 | 50.9 | 66.1 |
-| loop | 58.5 | 58.9 | 0.0 | 61.7 |
+| DS1 (database) | 39.4 | 38.9 | 19.3 | 43.8 |
+| S3 (web search) | 37.1 | 35.7 | 18.9 | 51.6 |
+| OLTP (database) | 52.6 | 53.8 | 50.9 | 66.1 |
+| loop | 57.4 | 58.7 | 0.0 | 61.7 |
 | gli | 39.2 | 35.6 | 17.6 | 40.7 |
-| multi2 | 63.0 | 63.1 | 51.0 | 67.2 |
-| sprite | 61.5 | 62.4 | 59.8 | 76.6 |
+| multi2 | 62.7 | 63.1 | 51.0 | 67.2 |
+| sprite | 61.2 | 62.9 | 59.8 | 76.6 |
 
-Kaffeine beats LRU by 12 to 58 points on five of the seven traces and is level with Caffeine
-on average. It loses on OLTP, a trace that rewards recently used keys: Caffeine resizes its
-window while running, and Kaffeine's window is fixed at 1% of the cache.
+Kaffeine beats LRU by 12 to 57 points on five of the seven traces, edges it on the other two,
+and is level with Caffeine on average. Its window resizes itself while running, like
+Caffeine's: on OLTP, a trace that rewards recently used keys, that cut the gap to Caffeine
+from 3.2 points to 1.2.
 
 ### Throughput
 
@@ -155,5 +160,5 @@ THREADS=8 scripts/benchmark.sh -p cache=kaffeine,caffeine     # a quicker, focus
 
 ## License
 
-Apache 2.0, see [LICENSE](LICENSE). The cache traces used for the hit ratio results belong to
+Copyright 2026 Shashank Patil. Licensed under Apache 2.0, see [LICENSE](LICENSE) and [NOTICE](NOTICE). The cache traces used for the hit ratio results belong to
 their authors and are cited in [bench/RESULTS.md](bench/RESULTS.md).
