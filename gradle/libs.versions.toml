@@ -3,9 +3,11 @@ kotlin = "2.4.21"
 caffeine = "3.3.1"
 jmh-core = "1.37"
 jmh-plugin = "0.7.4"
+lincheck = "3.7"
 
 [libraries]
 caffeine = { module = "com.github.ben-manes.caffeine:caffeine", version.ref = "caffeine" }
+lincheck = { module = "org.jetbrains.lincheck:lincheck", version.ref = "lincheck" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

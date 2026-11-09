@@ -10,8 +10,11 @@ kotlin {
 
 dependencies {
     testImplementation(kotlin("test"))
+    testImplementation(libs.lincheck)
 }
 
 tasks.test {
     useJUnitPlatform()
+    // Lincheck's model checker keeps a lot of state while it explores thread interleavings.
+    maxHeapSize = "2g"
 }
