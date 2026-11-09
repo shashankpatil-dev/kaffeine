@@ -1,0 +1,3 @@
+# JitPack builds the library from a git tag. We need JDK 17, the rest is JitPack's default Gradle build.
+jdk:
+  - openjdk17

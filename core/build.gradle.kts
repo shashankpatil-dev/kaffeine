@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kover)
+    `maven-publish`
 }
 
 kotlin {
@@ -16,6 +17,33 @@ dependencies {
     testImplementation(kotlin("test"))
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.lincheck)
+}
+
+java {
+    withSourcesJar()
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            artifactId = "kaffeine"
+            from(components["java"])
+            pom {
+                name = "Kaffeine"
+                description = "A coroutine-native in-memory cache for Kotlin, with W-TinyLFU eviction and timing-wheel expiry"
+                url = "https://github.com/shashankpatil-dev/kaffeine"
+                licenses {
+                    license {
+                        name = "Apache-2.0"
+                        url = "https://www.apache.org/licenses/LICENSE-2.0"
+                    }
+                }
+                scm {
+                    url = "https://github.com/shashankpatil-dev/kaffeine"
+                }
+            }
+        }
+    }
 }
 
 kover {
